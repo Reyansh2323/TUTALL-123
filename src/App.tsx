@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   GraduationCap, Sun, Moon, Home, Brain, BookOpen, BarChart3,
   DollarSign, LogIn, User, Search, Sparkles, HelpCircle, CheckCircle,
@@ -21,6 +21,13 @@ const C = {
   navy:'#1B3C53', navyL:'#234C6A', slate:'#456882', sand:'#D2C1B6',
   sage:'#EBF4DD', sageMid:'#90AB8B', forest:'#5A7863', charcoal:'#3B4953',
   moss:'#5B7E3C', chroma:'#A2CB8B', neon:'#E8F5BD', ruby:'#C44545', white:'#fff',
+  // Dark mode specific
+  darkBg: '#0f172a',
+  darkCard: '#1e293b',
+  darkBorder: '#475569',
+  darkText: '#f1f5f9',
+  darkMuted: '#94a3b8',
+  darkAccent: '#A2CB8B',
 };
 
 export default function App() {
@@ -30,8 +37,9 @@ export default function App() {
   const [user, setUser] = useState<UserData | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [hover, setHover] = useState(false);
-  const [cx, setCx] = useState(0);
-  const [cy, setCy] = useState(0);
+  const cursorRef = React.useRef({ x: 0, y: 0, rafId: 0 });
+  const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
+  const [cursorReady, setCursorReady] = useState(false);
 
   // Login
   const [lmode, setLmode] = useState<'in'|'up'>('in');
@@ -68,25 +76,47 @@ export default function App() {
   const [fitScore, setFitScore] = useState<number|null>(null);
 
   useEffect(() => {
-    const move = (e: MouseEvent) => {
-      setCx(e.clientX); setCy(e.clientY);
-      document.documentElement.style.setProperty('--cursor-x', e.clientX + 'px');
-      document.documentElement.style.setProperty('--cursor-y', e.clientY + 'px');
+    let lastUpdate = 0;
+    const THROTTLE_MS = 16; // ~60fps
+
+    const animate = () => {
+      const now = performance.now();
+      if (now - lastUpdate >= THROTTLE_MS) {
+        lastUpdate = now;
+        const { x, y } = cursorRef.current;
+        setCursorPos({ x, y });
+        document.documentElement.style.setProperty('--cursor-x', `${x}px`);
+        document.documentElement.style.setProperty('--cursor-y', `${y}px`);
+      }
+      cursorRef.current.rafId = requestAnimationFrame(animate);
     };
-    window.addEventListener('mousemove', move);
-    return () => window.removeEventListener('mousemove', move);
-  }, []);
+
+    const move = (e: MouseEvent) => {
+      cursorRef.current.x = e.clientX;
+      cursorRef.current.y = e.clientY;
+      if (!cursorReady) setCursorReady(true);
+    };
+
+    // Start RAF loop
+    cursorRef.current.rafId = requestAnimationFrame(animate);
+    window.addEventListener('mousemove', move, { passive: true });
+
+    return () => {
+      cancelAnimationFrame(cursorRef.current.rafId);
+      window.removeEventListener('mousemove', move);
+    };
+  }, [cursorReady]);
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
   }, [dark]);
 
-  const bg = dark ? C.navy : C.sage;
-  const fg2 = dark ? C.neon : C.navy;
-  const sub = dark ? C.sand : C.slate;
-  const cardBg = dark ? C.navyL : C.white;
-  const border = dark ? C.chroma : C.charcoal;
-  const shadow = dark ? `4px 4px 0 ${C.chroma}` : `4px 4px 0 ${C.charcoal}`;
+  const bg = dark ? C.darkBg : C.sage;
+  const fg2 = dark ? C.darkText : C.navy;
+  const sub = dark ? C.darkMuted : C.slate;
+  const cardBg = dark ? C.darkCard : C.white;
+  const border = dark ? C.darkAccent : C.charcoal;
+  const shadow = dark ? `4px 4px 0 ${C.darkAccent}` : `4px 4px 0 ${C.charcoal}`;
 
   const card = (extra?: React.CSSProperties): React.CSSProperties => ({
     border: `4px solid ${border}`, borderRadius: '1.5rem',
@@ -103,8 +133,8 @@ export default function App() {
 
   const inp: React.CSSProperties = {
     border: `4px solid ${border}`, borderRadius: '1.5rem',
-    backgroundColor: dark ? C.navyL : C.white,
-    color: dark ? C.neon : C.navy, padding: '0.75rem 1rem',
+    backgroundColor: cardBg,
+    color: fg2, padding: '0.75rem 1rem',
     fontFamily: 'system-ui, sans-serif', fontSize: '1rem',
     boxShadow: `2px 2px 0 ${border}`, outline: 'none', width: '100%',
   };
@@ -166,13 +196,42 @@ export default function App() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: bg, color: fg2, fontFamily: 'system-ui, sans-serif', transition: 'background-color 0.4s, color 0.3s' }}>
 
-      {/* Custom Cursor */}
-      <div style={{ position:'fixed', inset:0, pointerEvents:'none', zIndex:9999, background:`radial-gradient(600px circle at ${cx}px ${cy}px, rgba(255,255,255,0.08), transparent 42%)` }} className="hidden md:block" />
-      <div style={{ position:'fixed', left:cx, top:cy, width: hover?12:8, height: hover?12:8, backgroundColor: dark?C.neon:C.navy, borderRadius:'50%', pointerEvents:'none', zIndex:10001, transform:'translate(-50%,-50%)', transition:'all 0.15s' }} className="hidden md:block" />
-      <div style={{ position:'fixed', left:cx, top:cy, width: hover?56:34, height: hover?56:34, border:`2px solid ${hover?C.chroma:border}`, borderRadius:'50%', pointerEvents:'none', zIndex:10000, transform:'translate(-50%,-50%)', transition:'all 0.15s' }} className="hidden md:block" />
+      {/* Custom Cursor - Optimized with RAF */}
+      {cursorReady && (
+        <>
+          <div style={{
+            position: 'fixed',
+            left: cursorPos.x,
+            top: cursorPos.y,
+            width: 8,
+            height: 8,
+            backgroundColor: dark ? '#A2CB8B' : '#1B3C53',
+            borderRadius: '50%',
+            pointerEvents: 'none',
+            zIndex: 10001,
+            transform: 'translate(-50%, -50%)',
+            willChange: 'left, top, width, height, background-color',
+            transition: 'width 0.15s ease, height 0.15s ease, background-color 0.15s ease',
+          }} className="hidden md:block" />
+          <div style={{
+            position: 'fixed',
+            left: cursorPos.x,
+            top: cursorPos.y,
+            width: hover ? 44 : 32,
+            height: hover ? 44 : 32,
+            border: `2px solid ${dark ? '#A2CB8B' : '#3B4953'}`,
+            borderRadius: '50%',
+            pointerEvents: 'none',
+            zIndex: 10000,
+            transform: 'translate(-50%, -50%)',
+            willChange: 'left, top, width, height',
+            transition: 'width 0.15s ease, height 0.15s ease, border-color 0.15s ease',
+          }} className="hidden md:block" />
+        </>
+      )}
 
       {/* Navbar */}
-      <nav style={{ position:'fixed', top:0, left:0, right:0, zIndex:50, backdropFilter:'blur(12px)', WebkitBackdropFilter:'blur(12px)', backgroundColor: dark?'rgba(27,60,83,0.8)':'rgba(255,255,255,0.8)', borderBottom:`4px solid ${border}` }}>
+      <nav style={{ position:'fixed', top:0, left:0, right:0, zIndex:50, backdropFilter:'blur(12px)', WebkitBackdropFilter:'blur(12px)', backgroundColor: dark?'rgba(15,23,42,0.9)':'rgba(255,255,255,0.85)', borderBottom:`4px solid ${border}` }}>
         <div style={{ maxWidth:1280, margin:'0 auto', padding:'0.75rem 1rem', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           {/* Logo */}
           <button onClick={() => go('home')} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
@@ -188,8 +247,8 @@ export default function App() {
             {nav.map(({ id, label, Icon }) => (
               <button key={id} onClick={() => go(id)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
                 style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.5rem 1rem', borderRadius:9999, border:'none', cursor:'none', fontFamily:"'Roboto Slab',serif", fontWeight:600, transition:'all 0.2s',
-                  backgroundColor: page===id ? (dark?C.chroma:C.navy) : 'transparent',
-                  color: page===id ? (dark?C.navy:C.white) : fg2 }}>
+                  backgroundColor: page===id ? (dark ? C.darkAccent : C.navy) : 'transparent',
+                  color: page===id ? (dark ? '#0f172a' : C.white) : fg2 }}>
                 <Icon size={18} /><span>{label}</span>
               </button>
             ))}
@@ -199,13 +258,13 @@ export default function App() {
           <div style={{ display:'flex', gap:'0.75rem', alignItems:'center' }}>
             <button onClick={() => setDark(!dark)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
               style={btn(cardBg, fg2, { padding:'0.5rem' })}>
-              {dark ? <Sun size={20} color={C.neon} /> : <Moon size={20} color={C.navy} />}
+              {dark ? <Sun size={20} color={C.darkAccent} /> : <Moon size={20} color={C.navy} />}
             </button>
             {loggedIn
-              ? <button onClick={() => { setLoggedIn(false); setUser(null); go('home'); }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(C.sageMid, C.navy)}>
+              ? <button onClick={() => { setLoggedIn(false); setUser(null); go('home'); }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark ? C.darkAccent : C.sageMid, dark ? '#0f172a' : C.navy)}>
                   <User size={18} /><span className="hidden sm:inline">{user?.name}</span>
                 </button>
-              : <button onClick={() => go('login')} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white)}>
+              : <button onClick={() => go('login')} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark ? C.darkAccent : C.navy, dark ? '#0f172a' : C.white)}>
                   <LogIn size={18} /><span className="hidden sm:inline">Log In</span>
                 </button>
             }
@@ -221,7 +280,7 @@ export default function App() {
           <div style={{ borderTop:`4px solid ${border}`, backgroundColor:cardBg, padding:'1rem' }} className="lg:hidden">
             {nav.map(({ id, label, Icon }) => (
               <button key={id} onClick={() => go(id)} style={{ display:'flex', width:'100%', gap:'0.75rem', alignItems:'center', padding:'0.75rem 1rem', marginBottom:'0.25rem', borderRadius:'1rem', border:'none', cursor:'none', fontFamily:"'Roboto Slab',serif",
-                backgroundColor: page===id?(dark?C.chroma:C.navy):'transparent', color: page===id?(dark?C.navy:C.white):fg2 }}>
+                backgroundColor: page===id?(dark ? C.darkAccent : C.navy):'transparent', color: page===id?(dark ? '#0f172a' : C.white):fg2 }}>
                 <Icon size={20} /><span>{label}</span>
               </button>
             ))}
@@ -238,23 +297,23 @@ export default function App() {
             {/* Hero */}
             <section style={{ textAlign:'center', padding:'3rem 0' }}>
               <div style={{ ...card(), display:'inline-flex', alignItems:'center', gap:'0.5rem', padding:'0.5rem 1rem', marginBottom:'1.5rem' }}>
-                <Sparkles size={20} color={C.chroma} />
+                <Sparkles size={20} color={C.darkAccent} />
                 <span style={{ fontFamily:"'Roboto Slab',serif", color:fg2 }}>AI-Powered Learning for FGLI Scholars</span>
               </div>
               <h1 style={{ fontFamily:"'Platypi',Georgia,serif", fontSize:'clamp(2.5rem,6vw,4.5rem)', fontWeight:700, lineHeight:1.1, marginBottom:'1.5rem' }}>
                 <span style={{ color:fg2 }}>Learn smarter.<br />Plan better.<br /></span>
-                <span style={{ color: dark?C.chroma:C.sageMid }}>Leveling the playing field.</span>
+                <span style={{ color: dark ? C.darkAccent : C.sageMid }}>Leveling the playing field.</span>
               </h1>
               <p style={{ color:sub, fontSize:'1.125rem', maxWidth:'42rem', margin:'0 auto 2rem', lineHeight:1.6 }}>
                 TUTall demystifies the hidden curriculum for First-Generation and Low-Income STEM students through AI tutoring, scholarship guidance, and personalized academic planning.
               </p>
               <div style={{ display:'flex', gap:'1rem', justifyContent:'center', flexWrap:'wrap' }}>
                 <button onClick={() => go('learning')} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-                  style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white, { fontSize:'1.1rem', padding:'1rem 2rem' })}>
+                  style={btn(dark ? C.darkAccent : C.navy, dark ? '#0f172a' : C.white, { fontSize:'1.1rem', padding:'1rem 2rem' })}>
                   Start Learning Free <ArrowRight size={20} />
                 </button>
                 <button onClick={() => go('scholarship')} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-                  style={btn(C.sageMid, C.navy, { fontSize:'1.1rem', padding:'1rem 2rem' })}>
+                  style={btn(dark ? '#334155' : C.sageMid, dark ? C.darkText : C.navy, { fontSize:'1.1rem', padding:'1rem 2rem' })}>
                   Explore Grants <DollarSign size={20} />
                 </button>
               </div>
