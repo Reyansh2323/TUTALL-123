@@ -5,12 +5,15 @@ export async function apiFetch<T = unknown>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
+  const { headers: customHeaders, ...rest } = options;
+  const headers = new Headers(customHeaders);
+  if (!headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json');
+  }
+
   const res = await fetch(`${API_BASE}${path}`, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(options.headers || {}),
-    },
-    ...options,
+    ...rest,
+    headers,
   });
 
   if (!res.ok) {

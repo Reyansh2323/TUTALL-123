@@ -129,11 +129,12 @@ export default function App() {
     };
 
     // Start RAF loop
-    cursorRef.current.rafId = requestAnimationFrame(animate);
+    const rafId = requestAnimationFrame(animate);
+    cursorRef.current.rafId = rafId;
     window.addEventListener('mousemove', move, { passive: true });
 
     return () => {
-      cancelAnimationFrame(cursorRef.current.rafId);
+      cancelAnimationFrame(rafId);
       window.removeEventListener('mousemove', move);
     };
   }, [cursorReady]);
@@ -164,13 +165,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (page === 'dashboard') loadDashboard();
-  }, [page]);
-
-  useEffect(() => {
-    if (page === 'quiz' && quizQuestions.length === 0 && !quizLoading && !quizError) {
-      loadQuiz(query || quizTopic);
-    }
+    if (page === 'dashboard') void loadDashboard();
   }, [page]);
 
   const resetQuizState = () => {
@@ -256,7 +251,13 @@ export default function App() {
     { id: 'scholarship' as Page, label: 'Scholarship Advisor', Icon: DollarSign },
   ];
 
-  const go = (p: Page) => { setPage(p); setMobileOpen(false); };
+  const go = (p: Page) => {
+    setPage(p);
+    setMobileOpen(false);
+    if (p === 'quiz' && quizQuestions.length === 0 && !quizLoading) {
+      void loadQuiz(query || quizTopic);
+    }
+  };
 
   const doLogin = (e: React.FormEvent) => {
     e.preventDefault();
