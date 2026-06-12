@@ -1,21 +1,28 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   GraduationCap, Sun, Moon, Home, Brain, BookOpen, BarChart3,
   DollarSign, LogIn, User, Search, Sparkles, HelpCircle, CheckCircle,
   XCircle, ChevronRight, Target, Trophy, AlertTriangle, Lightbulb,
-  Calculator, Globe, Award, Heart, ArrowRight, Menu, X,
+  Calculator, Globe, Award, Heart, ArrowRight, Menu, X, Loader2, Wifi, WifiOff,
 } from 'lucide-react';
+import {
+  checkHealth,
+  fetchExplain,
+  fetchQuiz,
+  saveProgress,
+  fetchDashboard,
+  fetchScholarshipMatch,
+  fetchAssistant,
+  formatExplainResponse,
+  normalizeQuizQuestion,
+  sourceLabel,
+  type QuizQuestion,
+} from './api';
+
+const STUDENT_ID = 'demo-user';
 
 type Page = 'home' | 'login' | 'learning' | 'quiz' | 'dashboard' | 'scholarship';
 interface UserData { email: string; name: string; isFGLI: boolean; }
-interface QuizQ { id: number; question: string; options: string[]; correct: number; hint: string; topic: string; }
-
-const QUIZ: QuizQ[] = [
-  { id:1, question:"What is Newton's First Law of Motion?", options:["F = ma","An object at rest stays at rest unless acted upon by a force","Energy cannot be created or destroyed","Every action has an equal and opposite reaction"], correct:1, hint:"Think about inertia — what keeps a book still on a frictionless table?", topic:"Physics" },
-  { id:2, question:"In binary search, what is the time complexity?", options:["O(n)","O(n²)","O(log n)","O(1)"], correct:2, hint:"Binary search halves the problem each step. 16 items → how many steps?", topic:"CS" },
-  { id:3, question:"Determinant of [[a,b],[c,d]] is?", options:["a+d-b-c","ad - bc","ad + bc","a²+b²"], correct:1, hint:"Multiply diagonally: one diagonal minus the other.", topic:"Math" },
-  { id:4, question:"What gas do plants release during photosynthesis?", options:["CO₂","Nitrogen","Oxygen","Hydrogen"], correct:2, hint:"Plants consume CO₂ and produce something animals breathe.", topic:"Biology" },
-];
 
 const C = {
   navy:'#1B3C53', navyL:'#234C6A', slate:'#456882', sand:'#D2C1B6',
@@ -40,6 +47,7 @@ export default function App() {
   const cursorRef = React.useRef({ x: 0, y: 0, rafId: 0 });
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
   const [cursorReady, setCursorReady] = useState(false);
+  const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
 
   // Login
   const [lmode, setLmode] = useState<'in'|'up'>('in');
@@ -51,10 +59,23 @@ export default function App() {
   // Learning
   const [query, setQuery] = useState('');
   const [aiResp, setAiResp] = useState('');
+  const [aiSource, setAiSource] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [followUp, setFollowUp] = useState('');
+  const [assistantResp, setAssistantResp] = useState('');
+  const [assistantLoading, setAssistantLoading] = useState(false);
+  const [assistantError, setAssistantError] = useState<string | null>(null);
+  const [assistantSource, setAssistantSource] = useState('');
   const [saved, setSaved] = useState<string[]>([]);
   const [loBw, setLoBw] = useState(false);
 
   // Quiz
+  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
+  const [quizTopic, setQuizTopic] = useState('Photosynthesis');
+  const [quizLoading, setQuizLoading] = useState(false);
+  const [quizError, setQuizError] = useState<string | null>(null);
+  const [quizSource, setQuizSource] = useState('');
   const [qIdx, setQIdx] = useState(0);
   const [sel, setSel] = useState<number|null>(null);
   const [hint, setHint] = useState(false);
@@ -63,9 +84,12 @@ export default function App() {
   const [answered, setAnswered] = useState(false);
 
   // Dashboard
-  const [mods, setMods] = useState(12);
-  const [acc, setAcc] = useState(78);
-  const [ready, setReady] = useState(65);
+  const [mods, setMods] = useState(0);
+  const [acc, setAcc] = useState(0);
+  const [ready, setReady] = useState(0);
+  const [recommendedTopic, setRecommendedTopic] = useState('');
+  const [dashboardLoading, setDashboardLoading] = useState(false);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
 
   // Scholarship
   const [gpa, setGpa] = useState('');
@@ -74,6 +98,13 @@ export default function App() {
   const [fg, setFg] = useState(false);
   const [fin, setFin] = useState(false);
   const [fitScore, setFitScore] = useState<number|null>(null);
+  const [scholarshipSummary, setScholarshipSummary] = useState('');
+  const [strengths, setStrengths] = useState<string[]>([]);
+  const [improvements, setImprovements] = useState<string[]>([]);
+  const [recommendedScholarships, setRecommendedScholarships] = useState<{ name: string; fit: string; reason: string }[]>([]);
+  const [scholarshipLoading, setScholarshipLoading] = useState(false);
+  const [scholarshipError, setScholarshipError] = useState<string | null>(null);
+  const [scholarshipSource, setScholarshipSource] = useState('');
 
   useEffect(() => {
     let lastUpdate = 0;
@@ -110,6 +141,84 @@ export default function App() {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
   }, [dark]);
+
+  useEffect(() => {
+    checkHealth().then(setBackendOnline);
+  }, []);
+
+  const loadDashboard = async () => {
+    setDashboardLoading(true);
+    setDashboardError(null);
+    try {
+      const data = await fetchDashboard(STUDENT_ID);
+      setMods(data.completed_modules ?? 0);
+      setAcc(data.quiz_accuracy ?? 0);
+      setReady(data.scholarship_readiness ?? 0);
+      if (data.saved_topics?.length) setSaved(data.saved_topics);
+      setRecommendedTopic(data.recommended_next_topic ?? '');
+    } catch {
+      setDashboardError('Could not load dashboard data. Please try again.');
+    } finally {
+      setDashboardLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (page === 'dashboard') loadDashboard();
+  }, [page]);
+
+  useEffect(() => {
+    if (page === 'quiz' && quizQuestions.length === 0 && !quizLoading && !quizError) {
+      loadQuiz(query || quizTopic);
+    }
+  }, [page]);
+
+  const resetQuizState = () => {
+    setQIdx(0);
+    setSel(null);
+    setHint(false);
+    setScore(0);
+    setDone(false);
+    setAnswered(false);
+  };
+
+  const loadQuiz = async (topic?: string) => {
+    const nextTopic = (topic || query || quizTopic || 'Photosynthesis').trim();
+    setQuizLoading(true);
+    setQuizError(null);
+    resetQuizState();
+    try {
+      const data = await fetchQuiz(nextTopic);
+      const questions = (data.questions || []).map(normalizeQuizQuestion);
+      if (!questions.length) throw new Error('No questions returned');
+      setQuizQuestions(questions);
+      setQuizTopic(data.topic || nextTopic);
+      setQuizSource(data.source || '');
+    } catch {
+      setQuizQuestions([]);
+      setQuizError('Could not load quiz. Please try again.');
+    } finally {
+      setQuizLoading(false);
+    }
+  };
+
+  const finishQuiz = async (finalScore: number) => {
+    const total = quizQuestions.length;
+    const pct = total ? Math.round((finalScore / total) * 100) : 0;
+    setDone(true);
+    setAcc(pct);
+    try {
+      const data = await saveProgress({
+        student_id: STUDENT_ID,
+        topic: quizTopic,
+        score: finalScore,
+        total,
+      });
+      if (typeof data.percentage === 'number') setAcc(data.percentage);
+    } catch {
+      // Keep local score if save fails
+    }
+  };
 
   const bg = dark ? C.darkBg : C.sage;
   const fg2 = dark ? C.darkText : C.navy;
@@ -158,39 +267,117 @@ export default function App() {
     }
   };
 
-  const doSearch = () => {
-    if (query.trim()) {
-      setAiResp(`Topic: ${query}\n\nKey concepts:\n• Fundamental principles and definitions\n• Mathematical relationships and formulas\n• Real-world applications in STEM\n\n"Understanding this topic is essential for STEM success." — TUTall AI`);
+  const doSearch = async (topicOverride?: string) => {
+    const topic = (topicOverride ?? query).trim();
+    if (!topic) return;
+    setQuery(topic);
+    setAiLoading(true);
+    setAiError(null);
+    setAssistantResp('');
+    setAssistantError(null);
+    try {
+      const data = await fetchExplain(topic, loBw);
+      setAiResp(formatExplainResponse(data));
+      setAiSource(data.source || '');
+    } catch {
+      setAiResp('');
+      setAiError('Could not load explanation. Please try again.');
+    } finally {
+      setAiLoading(false);
     }
   };
+
+  const askFollowUp = async () => {
+    const question = followUp.trim();
+    const topic = query.trim();
+    if (!question || !topic) return;
+    setAssistantLoading(true);
+    setAssistantError(null);
+    try {
+      const data = await fetchAssistant(topic, question);
+      const parts = [data.answer];
+      if (data.key_points?.length) {
+        parts.push('\n\nKey points:');
+        data.key_points.forEach((p) => parts.push(`• ${p}`));
+      }
+      if (data.example) parts.push(`\n\nExample:\n${data.example}`);
+      if (data.next_steps?.length) {
+        parts.push('\n\nNext steps:');
+        data.next_steps.forEach((s) => parts.push(`• ${s}`));
+      }
+      setAssistantResp(parts.join('\n'));
+      setAssistantSource(data.source || '');
+      setFollowUp('');
+    } catch {
+      setAssistantError('Could not get an answer. Please try again.');
+    } finally {
+      setAssistantLoading(false);
+    }
+  };
+
+  const currentQuestion = quizQuestions[qIdx];
 
   const selectAns = (i: number) => { if (!answered) setSel(i); };
 
   const submit = () => {
-    if (sel !== null && !answered) {
+    if (sel !== null && !answered && currentQuestion) {
       setAnswered(true);
-      if (sel === QUIZ[qIdx].correct) setScore(s => s + 1);
+      if (sel === currentQuestion.correct) setScore(s => s + 1);
     }
   };
 
   const next = () => {
-    if (qIdx < QUIZ.length - 1) {
-      setQIdx(q => q + 1); setSel(null); setHint(false); setAnswered(false);
+    if (!currentQuestion) return;
+    const finalScore = sel === currentQuestion.correct ? score + 1 : score;
+    if (qIdx < quizQuestions.length - 1) {
+      setQIdx(q => q + 1);
+      setSel(null);
+      setHint(false);
+      setAnswered(false);
     } else {
-      setDone(true);
-      setAcc(Math.round(((sel === QUIZ[qIdx].correct ? score + 1 : score) / QUIZ.length) * 100));
+      finishQuiz(finalScore);
     }
   };
 
-  const reset = () => { setQIdx(0); setSel(null); setHint(false); setScore(0); setDone(false); setAnswered(false); };
+  const reset = () => { loadQuiz(quizTopic); };
 
-  const calcFit = () => {
-    let s = 50;
-    const g = parseFloat(gpa) || 0;
-    if (g >= 3.8) s += 20; else if (g >= 3.5) s += 15; else if (g >= 3.0) s += 10;
-    if (fg) s += 15; if (fin) s += 15; if (major) s += 5;
-    const capped = Math.min(100, Math.max(0, s));
-    setFitScore(capped); setReady(capped);
+  const calcFit = async () => {
+    setScholarshipLoading(true);
+    setScholarshipError(null);
+    try {
+      const data = await fetchScholarshipMatch({
+        gpa: Number(gpa) || 0,
+        country,
+        major,
+        first_generation: fg,
+        financial_need: fin,
+      });
+      const scoreVal = data.fit_score ?? data.readiness_score ?? 0;
+      setFitScore(scoreVal);
+      setReady(scoreVal);
+      setScholarshipSummary(data.summary || '');
+      setStrengths(data.strengths || []);
+      setImprovements(data.improvements || []);
+      setRecommendedScholarships(data.recommended_scholarships || []);
+      setScholarshipSource(data.source || '');
+    } catch {
+      setScholarshipError('Could not calculate fit score. Please try again.');
+    } finally {
+      setScholarshipLoading(false);
+    }
+  };
+
+  const sourceBadge = (source: string) => {
+    if (!source) return null;
+    return (
+      <span style={{
+        display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
+        padding: '0.25rem 0.75rem', borderRadius: 9999, fontSize: '0.75rem',
+        border: `2px solid ${border}`, color: sub, fontFamily: "'Roboto Slab',serif",
+      }}>
+        {sourceLabel(source)}
+      </span>
+    );
   };
 
   return (
@@ -256,6 +443,17 @@ export default function App() {
 
           {/* Right controls */}
           <div style={{ display:'flex', gap:'0.75rem', alignItems:'center' }}>
+            {backendOnline !== null && (
+              <span style={{
+                display:'inline-flex', alignItems:'center', gap:'0.35rem',
+                padding:'0.35rem 0.75rem', borderRadius:9999, fontSize:'0.75rem',
+                border:`2px solid ${border}`, color: backendOnline ? (dark ? C.chroma : C.moss) : C.ruby,
+                fontFamily:"'Roboto Slab',serif", fontWeight:600,
+              }} className="hidden sm:inline-flex">
+                {backendOnline ? <Wifi size={14} /> : <WifiOff size={14} />}
+                {backendOnline ? 'Backend Connected' : 'Backend Offline'}
+              </span>
+            )}
             <button onClick={() => setDark(!dark)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
               style={btn(cardBg, fg2, { padding:'0.5rem' })}>
               {dark ? <Sun size={20} color={C.darkAccent} /> : <Moon size={20} color={C.navy} />}
@@ -421,30 +619,51 @@ export default function App() {
               <div style={{ display:'flex', gap:'1rem', flexWrap:'wrap' }}>
                 <div style={{ flex:1, minWidth:200, position:'relative' }}>
                   <Search size={20} style={{ position:'absolute', left:16, top:'50%', transform:'translateY(-50%)', color:sub }} />
-                  <input style={{ ...inp, paddingLeft:'3rem', fontSize:'1.125rem' }} value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>e.key==='Enter'&&doSearch()} placeholder="What STEM topic are we mastering today?" />
+                  <input style={{ ...inp, paddingLeft:'3rem', fontSize:'1.125rem' }} value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>e.key==='Enter'&&!aiLoading&&doSearch()} placeholder="What STEM topic are we mastering today?" />
                 </div>
-                <button onClick={doSearch} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white, { padding:'0.75rem 2rem', fontSize:'1rem' })}>
-                  <Sparkles size={18} /> Learn
+                <button onClick={() => doSearch()} disabled={aiLoading || !query.trim()} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white, { padding:'0.75rem 2rem', fontSize:'1rem', opacity: aiLoading || !query.trim() ? 0.6 : 1 })}>
+                  {aiLoading ? <Loader2 size={18} className="animate-spin" /> : <Sparkles size={18} />} Learn
                 </button>
               </div>
               <div style={{ display:'flex', gap:'0.5rem', flexWrap:'wrap', marginTop:'1rem' }}>
                 {["Newton's Laws","Binary Search","Algebraic Matrices","Photosynthesis"].map(t => (
-                  <button key={t} onClick={() => { setQuery(t); doSearch(); }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+                  <button key={t} onClick={() => { setQuery(t); doSearch(t); }} disabled={aiLoading} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
                     style={{ padding:'0.5rem 1rem', borderRadius:9999, border:`2px solid ${border}`, backgroundColor: dark?C.navyL:C.white, color:fg2, cursor:'none', fontFamily:'system-ui,sans-serif' }}>{t}</button>
                 ))}
               </div>
             </div>
+            {aiError && (
+              <div style={{ ...card({ border:`4px solid ${C.ruby}` }), padding:'1rem', marginBottom:'1.5rem', color:fg2 }}>
+                {aiError}
+              </div>
+            )}
             {aiResp && (
               <div style={{ ...card({ backgroundColor: dark?'rgba(91,126,60,0.12)':'rgba(144,171,139,0.12)' }), padding:'1.5rem' }}>
                 <div style={{ display:'flex', gap:'1rem', alignItems:'flex-start', marginBottom:'1.5rem' }}>
                   <div style={{ padding:'0.75rem', borderRadius:'1rem', backgroundColor:C.chroma, flexShrink:0 }}><Brain size={24} color={C.navy} /></div>
-                  <pre style={{ fontFamily:'system-ui,sans-serif', color:fg2, whiteSpace:'pre-wrap', lineHeight:1.6, margin:0, flex:1 }}>{aiResp}</pre>
+                  <div style={{ flex:1 }}>
+                    <div style={{ marginBottom:'0.75rem' }}>{sourceBadge(aiSource)}</div>
+                    <pre style={{ fontFamily:'system-ui,sans-serif', color:fg2, whiteSpace:'pre-wrap', lineHeight:1.6, margin:0 }}>{aiResp}</pre>
+                  </div>
                 </div>
                 <div style={{ display:'flex', gap:'0.75rem', flexWrap:'wrap', paddingTop:'1.5rem', borderTop:`4px solid ${border}` }}>
-                  <button onClick={() => go('quiz')} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white)}><BookOpen size={18} /> Generate Practice Quiz</button>
+                  <button onClick={() => { go('quiz'); loadQuiz(query); }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white)}><BookOpen size={18} /> Generate Practice Quiz</button>
                   <button onClick={() => { if(query && !saved.includes(query)) { setSaved([...saved,query]); setMods(m=>m+1); } }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(C.sageMid, C.navy)}><Heart size={18} /> Save to Dashboard</button>
                   <button onClick={() => setLoBw(!loBw)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(loBw?C.moss:C.sand, loBw?C.white:C.navy)}><Globe size={18} /> Low-BW: {loBw?'ON':'OFF'}</button>
                 </div>
+                <div style={{ display:'flex', gap:'1rem', flexWrap:'wrap', marginTop:'1.5rem', paddingTop:'1.5rem', borderTop:`4px solid ${border}` }}>
+                  <input style={{ ...inp, flex:1, minWidth:200 }} value={followUp} onChange={e=>setFollowUp(e.target.value)} onKeyDown={e=>e.key==='Enter'&&!assistantLoading&&askFollowUp()} placeholder="Ask a follow-up question..." />
+                  <button onClick={askFollowUp} disabled={assistantLoading || !followUp.trim() || !query.trim()} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white, { opacity: assistantLoading || !followUp.trim() ? 0.6 : 1 })}>
+                    {assistantLoading ? <Loader2 size={18} className="animate-spin" /> : <HelpCircle size={18} />} Ask
+                  </button>
+                </div>
+                {assistantError && <p style={{ color:C.ruby, marginTop:'1rem', marginBottom:0 }}>{assistantError}</p>}
+                {assistantResp && (
+                  <div style={{ marginTop:'1rem', padding:'1rem', borderRadius:'1rem', border:`2px solid ${border}`, backgroundColor: cardBg }}>
+                    <div style={{ marginBottom:'0.5rem' }}>{sourceBadge(assistantSource)}</div>
+                    <pre style={{ fontFamily:'system-ui,sans-serif', color:fg2, whiteSpace:'pre-wrap', lineHeight:1.6, margin:0 }}>{assistantResp}</pre>
+                  </div>
+                )}
               </div>
             )}
             {saved.length > 0 && (
@@ -461,35 +680,52 @@ export default function App() {
         {/* QUIZ */}
         {page === 'quiz' && (
           <div style={{ maxWidth:640, margin:'0 auto' }}>
-            {!done ? (
+            {quizLoading ? (
+              <div style={{ ...card(), padding:'2rem', textAlign:'center' }}>
+                <Loader2 size={48} color={dark?C.chroma:C.moss} style={{ margin:'0 auto 1rem' }} className="animate-spin" />
+                <p style={{ color:sub }}>Loading quiz for {quizTopic}...</p>
+              </div>
+            ) : quizError ? (
+              <div style={{ ...card({ border:`4px solid ${C.ruby}` }), padding:'2rem', textAlign:'center' }}>
+                <AlertTriangle size={48} color={C.ruby} style={{ margin:'0 auto 1rem' }} />
+                <p style={{ color:fg2, marginBottom:'1.5rem' }}>{quizError}</p>
+                <button onClick={() => loadQuiz(query || quizTopic)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white)}>Try Again</button>
+              </div>
+            ) : !currentQuestion ? (
+              <div style={{ ...card(), padding:'2rem', textAlign:'center' }}>
+                <p style={{ color:sub, marginBottom:'1.5rem' }}>No quiz loaded yet.</p>
+                <button onClick={() => loadQuiz(query || quizTopic)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white)}>Load Quiz</button>
+              </div>
+            ) : !done ? (
               <>
                 {/* Progress */}
                 <div style={{ ...card(), padding:'1rem', marginBottom:'1.5rem' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.75rem' }}>
-                    <span style={{ fontFamily:"'Roboto Slab',serif", color:fg2 }}>Question {qIdx+1} of {QUIZ.length}</span>
-                    <span style={{ color:sub }}>Topic: {QUIZ[qIdx].topic}</span>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.75rem', flexWrap:'wrap', gap:'0.5rem' }}>
+                    <span style={{ fontFamily:"'Roboto Slab',serif", color:fg2 }}>Question {qIdx+1} of {quizQuestions.length}</span>
+                    <span style={{ color:sub }}>Topic: {currentQuestion.topic || quizTopic}</span>
+                    {quizSource && sourceBadge(quizSource)}
                   </div>
                   <div style={{ height:12, borderRadius:9999, backgroundColor: dark?C.navyL:C.sand, overflow:'hidden' }}>
-                    <div style={{ height:'100%', backgroundColor: dark?C.chroma:C.moss, width:`${((qIdx+1)/QUIZ.length)*100}%`, transition:'width 0.5s' }} />
+                    <div style={{ height:'100%', backgroundColor: dark?C.chroma:C.moss, width:`${((qIdx+1)/quizQuestions.length)*100}%`, transition:'width 0.5s' }} />
                   </div>
                 </div>
                 {/* Question */}
                 <div style={{ ...card(), padding:'1.5rem' }}>
-                  <h2 style={{ fontFamily:"'Platypi',serif", fontSize:'1.375rem', fontWeight:700, color:fg2, marginBottom:'1.5rem' }}>{QUIZ[qIdx].question}</h2>
+                  <h2 style={{ fontFamily:"'Platypi',serif", fontSize:'1.375rem', fontWeight:700, color:fg2, marginBottom:'1.5rem' }}>{currentQuestion.question}</h2>
                   <div style={{ display:'flex', flexDirection:'column', gap:'0.75rem', marginBottom:'1.5rem' }}>
-                    {QUIZ[qIdx].options.map((opt, i) => {
+                    {currentQuestion.options.map((opt, i) => {
                       let bg2 = dark ? C.navyL : C.white;
                       let bc = border;
                       if (answered) {
-                        if (i === QUIZ[qIdx].correct) { bg2 = dark?'rgba(162,203,139,0.3)':'rgba(91,126,60,0.25)'; bc = dark?C.chroma:C.moss; }
+                        if (i === currentQuestion.correct) { bg2 = dark?'rgba(162,203,139,0.3)':'rgba(91,126,60,0.25)'; bc = dark?C.chroma:C.moss; }
                         else if (i === sel) { bg2 = 'rgba(196,69,69,0.25)'; bc = C.ruby; }
                       } else if (sel === i) { bg2 = dark?'rgba(162,203,139,0.25)':'rgba(144,171,139,0.4)'; bc = dark?C.chroma:C.sageMid; }
                       return (
                         <button key={i} onClick={() => selectAns(i)} disabled={answered} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
                           style={{ padding:'1rem', textAlign:'left', borderRadius:'1rem', border:`4px solid ${bc}`, backgroundColor:bg2, color:fg2, cursor:'none', transition:'all 0.15s', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
                           <span>{opt}</span>
-                          {answered && i===QUIZ[qIdx].correct && <CheckCircle size={20} color={dark?C.chroma:C.moss} />}
-                          {answered && i===sel && i!==QUIZ[qIdx].correct && <XCircle size={20} color={C.ruby} />}
+                          {answered && i===currentQuestion.correct && <CheckCircle size={20} color={dark?C.chroma:C.moss} />}
+                          {answered && i===sel && i!==currentQuestion.correct && <XCircle size={20} color={C.ruby} />}
                         </button>
                       );
                     })}
@@ -499,7 +735,7 @@ export default function App() {
                     hint
                       ? <div style={{ ...card({ border:`4px solid ${dark?C.chroma:C.sageMid}`, backgroundColor: dark?'rgba(91,126,60,0.2)':'rgba(144,171,139,0.2)' }), padding:'1rem', display:'flex', gap:'0.75rem', alignItems:'flex-start', marginBottom:'1rem' }}>
                           <HelpCircle size={20} color={dark?C.chroma:C.moss} style={{flexShrink:0}} />
-                          <p style={{ color:fg2, margin:0 }}>{QUIZ[qIdx].hint}</p>
+                          <p style={{ color:fg2, margin:0 }}>{currentQuestion.hint}</p>
                         </div>
                       : <button onClick={() => setHint(true)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
                           style={btn(C.sageMid, C.navy, { marginBottom:'1rem' })}>
@@ -514,7 +750,7 @@ export default function App() {
                         </button>
                       : <button onClick={next} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
                           style={btn(dark?C.chroma:C.moss, dark?C.navy:C.white)}>
-                          {qIdx<QUIZ.length-1?'Next Question':'See Results'} <ChevronRight size={18} />
+                          {qIdx<quizQuestions.length-1?'Next Question':'See Results'} <ChevronRight size={18} />
                         </button>
                     }
                   </div>
@@ -528,13 +764,13 @@ export default function App() {
                   <svg viewBox="0 0 100 100" style={{ width:'100%', height:'100%', transform:'rotate(-90deg)' }}>
                     <circle cx="50" cy="50" r="40" fill="none" stroke={dark?C.navyL:C.sand} strokeWidth="8" />
                     <circle cx="50" cy="50" r="40" fill="none" stroke={dark?C.chroma:C.moss} strokeWidth="8"
-                      strokeDasharray="251" strokeDashoffset={251-(251*score/QUIZ.length)} strokeLinecap="round" style={{ animation:'progress-fill 1s ease-out' }} />
+                      strokeDasharray="251" strokeDashoffset={251-(251*score/quizQuestions.length)} strokeLinecap="round" style={{ animation:'progress-fill 1s ease-out' }} />
                   </svg>
                   <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                    <span style={{ fontFamily:"'Platypi',serif", fontSize:'2.5rem', fontWeight:700, color:fg2 }}>{Math.round((score/QUIZ.length)*100)}%</span>
+                    <span style={{ fontFamily:"'Platypi',serif", fontSize:'2.5rem', fontWeight:700, color:fg2 }}>{Math.round((score/quizQuestions.length)*100)}%</span>
                   </div>
                 </div>
-                <p style={{ color:sub, marginBottom:'1.5rem' }}>You got {score} of {QUIZ.length} correct.</p>
+                <p style={{ color:sub, marginBottom:'1.5rem' }}>You got {score} of {quizQuestions.length} correct.</p>
                 <div style={{ display:'flex', gap:'1rem', justifyContent:'center', flexWrap:'wrap' }}>
                   <button onClick={reset} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white)}>Try Again</button>
                   <button onClick={() => go('dashboard')} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(C.sageMid, C.navy)}>View Dashboard</button>
@@ -549,7 +785,10 @@ export default function App() {
           <div>
             <div style={{ textAlign:'center', marginBottom:'2rem' }}>
               <h1 style={{ fontFamily:"'Platypi',serif", fontSize:'2.25rem', fontWeight:700, color:fg2, margin:'0 0 0.5rem' }}>Welcome back, {user?.name||'Scholar'}</h1>
-              <p style={{ color:sub }}>Track your progress and continue your STEM journey</p>
+              <p style={{ color:sub }}>
+                {dashboardLoading ? 'Loading your progress...' : recommendedTopic ? `Recommended next topic: ${recommendedTopic}` : 'Track your progress and continue your STEM journey'}
+              </p>
+              {dashboardError && <p style={{ color:C.ruby, marginTop:'0.75rem' }}>{dashboardError}</p>}
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'1.5rem', marginBottom:'2rem' }}>
               {[
@@ -569,6 +808,14 @@ export default function App() {
                 </div>
               ))}
             </div>
+            {saved.length > 0 && (
+              <div style={{ ...card(), padding:'1.5rem', marginBottom:'2rem' }}>
+                <h3 style={{ fontFamily:"'Platypi',serif", fontWeight:700, color:fg2, marginBottom:'1rem' }}>Saved Topics</h3>
+                <div style={{ display:'flex', gap:'0.5rem', flexWrap:'wrap' }}>
+                  {saved.map((t,i) => <span key={i} style={{ padding:'0.25rem 0.75rem', borderRadius:9999, backgroundColor: dark?'rgba(162,203,139,0.3)':'rgba(144,171,139,0.3)', color:fg2, fontSize:'0.875rem' }}>{t}</span>)}
+                </div>
+              </div>
+            )}
             {/* Quick Actions */}
             <div style={{ ...card(), padding:'1.5rem' }}>
               <h3 style={{ fontFamily:"'Platypi',serif", fontWeight:700, color:fg2, marginBottom:'1rem' }}>Quick Actions</h3>
@@ -623,12 +870,14 @@ export default function App() {
                   ))}
                 </div>
               </div>
-              <button onClick={calcFit} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white, { width:'100%', marginTop:'1.5rem', padding:'1rem', fontSize:'1.1rem' })}>
-                Calculate My Fit Score
+              <button onClick={calcFit} disabled={scholarshipLoading} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white, { width:'100%', marginTop:'1.5rem', padding:'1rem', fontSize:'1.1rem', opacity: scholarshipLoading ? 0.7 : 1 })}>
+                {scholarshipLoading ? <Loader2 size={18} className="animate-spin" /> : <Calculator size={18} />} Calculate My Fit Score
               </button>
+              {scholarshipError && <p style={{ color:C.ruby, marginTop:'1rem', textAlign:'center' }}>{scholarshipError}</p>}
             </div>
             {fitScore !== null && (
               <div style={{ ...card(), padding:'2rem', textAlign:'center', marginBottom:'2rem' }}>
+                <div style={{ marginBottom:'1rem' }}>{sourceBadge(scholarshipSource)}</div>
                 <h3 style={{ fontFamily:"'Platypi',serif", fontSize:'1.5rem', fontWeight:700, color:fg2, marginBottom:'1.5rem' }}>Scholarship Fit Score</h3>
                 <div style={{ position:'relative', width:192, height:192, margin:'0 auto 1rem' }}>
                   <svg viewBox="0 0 100 100" style={{ width:'100%', height:'100%', transform:'rotate(-90deg)' }}>
@@ -640,7 +889,7 @@ export default function App() {
                     <span style={{ fontFamily:"'Platypi',serif", fontSize:'3rem', fontWeight:700, color:fg2 }}>{fitScore}%</span>
                   </div>
                 </div>
-                <p style={{ color:sub }}>{fitScore>=70?"Excellent! You're a strong candidate.":(fitScore>=50?"Good standing. Keep building your profile.":"Keep growing your profile for more opportunities.")}</p>
+                <p style={{ color:sub }}>{scholarshipSummary || (fitScore>=70?"Excellent! You're a strong candidate.":(fitScore>=50?"Good standing. Keep building your profile.":"Keep growing your profile for more opportunities."))}</p>
               </div>
             )}
             {/* Checklist */}
@@ -650,7 +899,7 @@ export default function App() {
                   <CheckCircle size={24} color={dark?C.chroma:C.moss} />
                   <h3 style={{ fontFamily:"'Platypi',serif", fontWeight:700, color:fg2, margin:0 }}>Strengths</h3>
                 </div>
-                {['Understanding fee waiver options','Researching QuestBridge deadlines','Personal statement storytelling','Requesting strong rec letters'].map((t,i) => (
+                {(strengths.length ? strengths : ['Understanding fee waiver options','Researching QuestBridge deadlines','Personal statement storytelling','Requesting strong rec letters']).map((t,i) => (
                   <div key={i} style={{ display:'flex', gap:'0.5rem', alignItems:'center', marginBottom:'0.5rem' }}>
                     <CheckCircle size={16} color={dark?C.chroma:C.moss} /><span style={{ color:fg2 }}>{t}</span>
                   </div>
@@ -661,7 +910,7 @@ export default function App() {
                   <AlertTriangle size={24} color={C.ruby} />
                   <h3 style={{ fontFamily:"'Platypi',serif", fontWeight:700, color:fg2, margin:0 }}>Things to Improve</h3>
                 </div>
-                {['Build extracurricular leadership','Create a standardized test plan','Explore work-study opportunities','Connect with FGLI support networks'].map((t,i) => (
+                {(improvements.length ? improvements : ['Build extracurricular leadership','Create a standardized test plan','Explore work-study opportunities','Connect with FGLI support networks']).map((t,i) => (
                   <div key={i} style={{ display:'flex', gap:'0.5rem', alignItems:'center', marginBottom:'0.5rem' }}>
                     <div style={{ width:16, height:16, border:`2px solid ${border}`, borderRadius:4, flexShrink:0 }} />
                     <span style={{ color:fg2 }}>{t}</span>
@@ -669,6 +918,20 @@ export default function App() {
                 ))}
               </div>
             </div>
+            {recommendedScholarships.length > 0 && (
+              <div style={{ ...card(), padding:'1.5rem', marginTop:'1.5rem' }}>
+                <h3 style={{ fontFamily:"'Platypi',serif", fontWeight:700, color:fg2, marginBottom:'1rem' }}>Recommended Scholarships</h3>
+                {recommendedScholarships.map((s, i) => (
+                  <div key={i} style={{ marginBottom:'1rem', paddingBottom:'1rem', borderBottom: i < recommendedScholarships.length - 1 ? `2px solid ${border}` : 'none' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', gap:'1rem', flexWrap:'wrap', marginBottom:'0.25rem' }}>
+                      <strong style={{ color:fg2 }}>{s.name}</strong>
+                      <span style={{ color: dark?C.chroma:C.moss, fontSize:'0.875rem' }}>{s.fit} fit</span>
+                    </div>
+                    <p style={{ color:sub, margin:0, fontSize:'0.875rem' }}>{s.reason}</p>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </main>
