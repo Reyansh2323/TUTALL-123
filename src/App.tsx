@@ -1,595 +1,638 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import {
-  Plus, X, ChevronRight, ChevronLeft, Trash2,
-  Github, ExternalLink, Mail, Code2, Layers,
-  Sparkles, Globe,
+  GraduationCap, Sun, Moon, Home, Brain, BookOpen, BarChart3,
+  DollarSign, LogIn, User, Search, Sparkles, HelpCircle, CheckCircle,
+  XCircle, ChevronRight, Target, Trophy, AlertTriangle, Lightbulb,
+  Calculator, Globe, Award, Heart, ArrowRight, Menu, X,
 } from 'lucide-react';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-type Col = 'todo' | 'inprog' | 'done';
-type Priority = 'low' | 'med' | 'high';
-type Tag = 'Design' | 'Dev' | 'Research' | 'Bug' | 'Feature';
+type Page = 'home' | 'login' | 'learning' | 'quiz' | 'dashboard' | 'scholarship';
+interface UserData { email: string; name: string; isFGLI: boolean; }
+interface QuizQ { id: number; question: string; options: string[]; correct: number; hint: string; topic: string; }
 
-interface Task {
-  id: string;
-  title: string;
-  tag: Tag;
-  priority: Priority;
-  col: Col;
-}
-
-// ─── Design tokens ────────────────────────────────────────────────────────────
-const BG       = '#09090b';
-const SURF     = 'rgba(255,255,255,0.028)';
-const SURF_H   = 'rgba(255,255,255,0.056)';
-const BORDER   = 'rgba(255,255,255,0.08)';
-const BORDER_H = 'rgba(255,255,255,0.18)';
-const TEXT     = '#f4f4f5';
-const MUTED    = '#71717a';
-const SUBTLE   = '#3f3f46';
-const EM       = '#10b981';
-const VIO      = '#8b5cf6';
-const CYN      = '#06b6d4';
-const AMB      = '#f59e0b';
-const RED      = '#f87171';
-
-// ─── Data ─────────────────────────────────────────────────────────────────────
-const INIT_TASKS: Task[] = [
-  { id: 'a1', title: 'Design system token audit', tag: 'Design', priority: 'high', col: 'todo' },
-  { id: 'a2', title: 'Add WCAG 2.1 audit pass', tag: 'Research', priority: 'med', col: 'todo' },
-  { id: 'b1', title: 'Implement OAuth 2.0 flow', tag: 'Dev', priority: 'high', col: 'inprog' },
-  { id: 'b2', title: 'REST API endpoint research', tag: 'Research', priority: 'med', col: 'inprog' },
-  { id: 'c1', title: 'Fix mobile nav breakpoints', tag: 'Bug', priority: 'low', col: 'done' },
-  { id: 'c2', title: 'Dark mode onboarding', tag: 'Feature', priority: 'med', col: 'done' },
+const QUIZ: QuizQ[] = [
+  { id:1, question:"What is Newton's First Law of Motion?", options:["F = ma","An object at rest stays at rest unless acted upon by a force","Energy cannot be created or destroyed","Every action has an equal and opposite reaction"], correct:1, hint:"Think about inertia — what keeps a book still on a frictionless table?", topic:"Physics" },
+  { id:2, question:"In binary search, what is the time complexity?", options:["O(n)","O(n²)","O(log n)","O(1)"], correct:2, hint:"Binary search halves the problem each step. 16 items → how many steps?", topic:"CS" },
+  { id:3, question:"Determinant of [[a,b],[c,d]] is?", options:["a+d-b-c","ad - bc","ad + bc","a²+b²"], correct:1, hint:"Multiply diagonally: one diagonal minus the other.", topic:"Math" },
+  { id:4, question:"What gas do plants release during photosynthesis?", options:["CO₂","Nitrogen","Oxygen","Hydrogen"], correct:2, hint:"Plants consume CO₂ and produce something animals breathe.", topic:"Biology" },
 ];
 
-const PROJECTS = [
-  { id: 1, name: 'NeuroPath', desc: 'Adaptive ML learning platform with personalized curriculum generation and real-time progress tracking at scale.', stack: ['Python', 'TensorFlow', 'FastAPI', 'React'], accent: EM, glow: 'rgba(16,185,129,0.07)' },
-  { id: 2, name: 'Zephyr UI', desc: 'Headless component library with 60+ primitives, full a11y support, and zero runtime CSS overhead.', stack: ['React', 'TypeScript', 'Radix', 'Storybook'], accent: VIO, glow: 'rgba(139,92,246,0.07)' },
-  { id: 3, name: 'DataViz Pro', desc: 'High-performance analytics dashboard rendering 1M+ data points at 60fps using WebGL instancing.', stack: ['D3.js', 'WebGL', 'React', 'Zustand'], accent: CYN, glow: 'rgba(6,182,212,0.07)' },
-  { id: 4, name: 'CloudSync', desc: 'Distributed file storage API with end-to-end encryption and real-time multi-user collaboration.', stack: ['Node.js', 'AWS S3', 'PostgreSQL', 'Redis'], accent: AMB, glow: 'rgba(245,158,11,0.07)' },
-  { id: 5, name: 'TUTall', desc: 'AI-powered student support platform for FGLI scholars with scholarship matching and personalized tutoring.', stack: ['React', 'Supabase', 'TypeScript', 'Vite'], accent: EM, glow: 'rgba(16,185,129,0.07)' },
-  { id: 6, name: 'Argus Monitor', desc: 'Lightweight APM tool with sub-100ms alert latency and beautiful flame graph visualizations.', stack: ['Go', 'ClickHouse', 'React', 'Prometheus'], accent: RED, glow: 'rgba(248,113,113,0.07)' },
-];
+const C = {
+  navy:'#1B3C53', navyL:'#234C6A', slate:'#456882', sand:'#D2C1B6',
+  sage:'#EBF4DD', sageMid:'#90AB8B', forest:'#5A7863', charcoal:'#3B4953',
+  moss:'#5B7E3C', chroma:'#A2CB8B', neon:'#E8F5BD', ruby:'#C44545', white:'#fff',
+};
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-const uid = () => Math.random().toString(36).slice(2, 9);
-const pColor = (p: Priority) => ({ high: RED, med: AMB, low: EM })[p];
-const tColor = (t: Tag) => ({ Design: VIO, Dev: CYN, Research: AMB, Bug: RED, Feature: EM })[t];
-
-// ─── Lerp ─────────────────────────────────────────────────────────────────────
-const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
-
-// ─── App ──────────────────────────────────────────────────────────────────────
 export default function App() {
-  // Refs for zero-lag cursor (no React state = no re-renders)
-  const dotRef       = useRef<HTMLDivElement>(null);
-  const ringRef      = useRef<HTMLDivElement>(null);
-  const glowRef      = useRef<HTMLDivElement>(null);
-  const mouse        = useRef({ x: -999, y: -999 });
-  const ring         = useRef({ x: -999, y: -999 });
-  const raf          = useRef(0);
+  const [page, setPage] = useState<Page>('home');
+  const [dark, setDark] = useState(false);
+  const [loggedIn, setLoggedIn] = useState(false);
+  const [user, setUser] = useState<UserData | null>(null);
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [hover, setHover] = useState(false);
+  const [cx, setCx] = useState(0);
+  const [cy, setCy] = useState(0);
 
-  // App state
-  const [tasks,      setTasks]      = useState<Task[]>(INIT_TASKS);
-  const [addingTo,   setAddingTo]   = useState<Col | null>(null);
-  const [newTitle,   setNewTitle]   = useState('');
-  const [newTag,     setNewTag]     = useState<Tag>('Dev');
-  const [newPri,     setNewPri]     = useState<Priority>('med');
-  const [activeSec,  setActiveSec]  = useState('hero');
+  // Login
+  const [lmode, setLmode] = useState<'in'|'up'>('in');
+  const [email, setEmail] = useState('');
+  const [pass, setPass] = useState('');
+  const [uname, setUname] = useState('');
+  const [fgli, setFgli] = useState(false);
 
-  // ─── Zero-lag cursor: passive listener + RAF loop + direct DOM writes ─────
+  // Learning
+  const [query, setQuery] = useState('');
+  const [aiResp, setAiResp] = useState('');
+  const [saved, setSaved] = useState<string[]>([]);
+  const [loBw, setLoBw] = useState(false);
+
+  // Quiz
+  const [qIdx, setQIdx] = useState(0);
+  const [sel, setSel] = useState<number|null>(null);
+  const [hint, setHint] = useState(false);
+  const [score, setScore] = useState(0);
+  const [done, setDone] = useState(false);
+  const [answered, setAnswered] = useState(false);
+
+  // Dashboard
+  const [mods, setMods] = useState(12);
+  const [acc, setAcc] = useState(78);
+  const [ready, setReady] = useState(65);
+
+  // Scholarship
+  const [gpa, setGpa] = useState('');
+  const [country, setCountry] = useState('USA');
+  const [major, setMajor] = useState('');
+  const [fg, setFg] = useState(false);
+  const [fin, setFin] = useState(false);
+  const [fitScore, setFitScore] = useState<number|null>(null);
+
   useEffect(() => {
-    const onMove = (e: MouseEvent) => {
-      mouse.current.x = e.clientX;
-      mouse.current.y = e.clientY;
+    const move = (e: MouseEvent) => {
+      setCx(e.clientX); setCy(e.clientY);
+      document.documentElement.style.setProperty('--cursor-x', e.clientX + 'px');
+      document.documentElement.style.setProperty('--cursor-y', e.clientY + 'px');
     };
-
-    const loop = () => {
-      const { x, y } = mouse.current;
-
-      // Dot snaps instantly — true zero-lag
-      if (dotRef.current) {
-        dotRef.current.style.left = x + 'px';
-        dotRef.current.style.top  = y + 'px';
-      }
-
-      // Ring lerps smoothly behind the dot
-      ring.current.x = lerp(ring.current.x, x, 0.13);
-      ring.current.y = lerp(ring.current.y, y, 0.13);
-      if (ringRef.current) {
-        ringRef.current.style.left = ring.current.x + 'px';
-        ringRef.current.style.top  = ring.current.y + 'px';
-      }
-
-      // Ambient spotlight follows cursor via CSS radial-gradient
-      if (glowRef.current) {
-        glowRef.current.style.background =
-          `radial-gradient(700px circle at ${x}px ${y}px,` +
-          ` rgba(16,185,129,0.042) 0%, rgba(139,92,246,0.022) 45%, transparent 72%)`;
-      }
-
-      raf.current = requestAnimationFrame(loop);
-    };
-
-    window.addEventListener('mousemove', onMove, { passive: true });
-    raf.current = requestAnimationFrame(loop);
-    return () => {
-      window.removeEventListener('mousemove', onMove);
-      cancelAnimationFrame(raf.current);
-    };
+    window.addEventListener('mousemove', move);
+    return () => window.removeEventListener('mousemove', move);
   }, []);
 
-  // ─── Section tracking for nav highlight ──────────────────────────────────
   useEffect(() => {
-    const sections = document.querySelectorAll<HTMLElement>('section[id]');
-    const obs = new IntersectionObserver(
-      (entries) => entries.forEach(e => { if (e.isIntersecting) setActiveSec(e.target.id); }),
-      { rootMargin: '-35% 0px -35% 0px', threshold: 0 }
-    );
-    sections.forEach(s => obs.observe(s));
-    return () => obs.disconnect();
-  }, []);
+    document.documentElement.classList.toggle('dark', dark);
+  }, [dark]);
 
-  // ─── Task actions ─────────────────────────────────────────────────────────
-  const addTask = () => {
-    if (!newTitle.trim() || !addingTo) return;
-    setTasks(p => [...p, { id: uid(), title: newTitle.trim(), tag: newTag, priority: newPri, col: addingTo }]);
-    setNewTitle('');
-    setAddingTo(null);
-  };
+  const bg = dark ? C.navy : C.sage;
+  const fg2 = dark ? C.neon : C.navy;
+  const sub = dark ? C.sand : C.slate;
+  const cardBg = dark ? C.navyL : C.white;
+  const border = dark ? C.chroma : C.charcoal;
+  const shadow = dark ? `4px 4px 0 ${C.chroma}` : `4px 4px 0 ${C.charcoal}`;
 
-  const delTask = (id: string) => setTasks(p => p.filter(t => t.id !== id));
-
-  const moveTask = (id: string, dir: 'l' | 'r') => {
-    const ord: Col[] = ['todo', 'inprog', 'done'];
-    setTasks(p => p.map(t => {
-      if (t.id !== id) return t;
-      const i = ord.indexOf(t.col);
-      return { ...t, col: dir === 'r' ? ord[Math.min(i + 1, 2)] : ord[Math.max(i - 1, 0)] };
-    }));
-  };
-
-  // ─── Hover helpers (direct DOM → no re-renders) ───────────────────────────
-  const hIn  = (accent: string) => (e: React.MouseEvent<HTMLDivElement>) => {
-    const el = e.currentTarget;
-    el.style.borderColor = `${accent}55`;
-    el.style.backgroundColor = accent === EM ? 'rgba(16,185,129,0.06)' :
-                               accent === VIO ? 'rgba(139,92,246,0.06)' :
-                               accent === CYN ? 'rgba(6,182,212,0.06)'  :
-                               accent === AMB ? 'rgba(245,158,11,0.06)' :
-                               accent === RED ? 'rgba(248,113,113,0.06)' : SURF_H;
-    el.style.transform = 'translateY(-3px)';
-  };
-  const hOut = (e: React.MouseEvent<HTMLDivElement>) => {
-    const el = e.currentTarget;
-    el.style.borderColor = BORDER;
-    el.style.backgroundColor = SURF;
-    el.style.transform = 'translateY(0)';
-  };
-
-  const btnIn  = (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.borderColor = BORDER_H; e.currentTarget.style.color = TEXT; };
-  const btnOut = (e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.borderColor = BORDER;   e.currentTarget.style.color = MUTED; };
-
-  const COLS: { id: Col; label: string; dot: string }[] = [
-    { id: 'todo',   label: 'To Do',       dot: SUBTLE },
-    { id: 'inprog', label: 'In Progress', dot: AMB },
-    { id: 'done',   label: 'Done',        dot: EM },
-  ];
-
-  // ─── Shared style helpers ─────────────────────────────────────────────────
   const card = (extra?: React.CSSProperties): React.CSSProperties => ({
-    padding: '1.25rem 1.375rem', borderRadius: 14,
-    border: `1px solid ${BORDER}`, backgroundColor: SURF,
-    transition: 'border-color 0.18s ease, background-color 0.18s ease, transform 0.18s ease',
-    willChange: 'transform, border-color, background-color',
-    ...extra,
+    border: `4px solid ${border}`, borderRadius: '1.5rem',
+    backgroundColor: cardBg, boxShadow: shadow, ...extra,
   });
 
-  const iconBtn = (extra?: React.CSSProperties): React.CSSProperties => ({
-    width: 30, height: 30, borderRadius: 8,
-    border: `1px solid ${BORDER}`, backgroundColor: SURF,
-    color: MUTED, display: 'flex', alignItems: 'center', justifyContent: 'center',
-    cursor: 'pointer', transition: 'border-color 0.15s, color 0.15s', ...extra,
-  });
-
-  const pill = (color: string): React.CSSProperties => ({
-    fontSize: '0.65rem', fontWeight: 700, letterSpacing: '0.05em',
-    textTransform: 'uppercase', padding: '2px 6px', borderRadius: 5,
-    backgroundColor: `${color}18`, color, border: `1px solid ${color}35`,
-    fontFamily: 'system-ui, sans-serif',
+  const btn = (bgColor: string, color: string, extra?: React.CSSProperties): React.CSSProperties => ({
+    display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+    border: `4px solid ${border}`, borderRadius: '1.5rem', padding: '0.5rem 1.25rem',
+    backgroundColor: bgColor, color, fontFamily: "'Roboto Slab', Georgia, serif",
+    fontWeight: 600, boxShadow: shadow, cursor: 'none',
+    transition: 'transform 0.15s, box-shadow 0.15s', ...extra,
   });
 
   const inp: React.CSSProperties = {
-    width: '100%', backgroundColor: 'rgba(255,255,255,0.04)',
-    border: `1px solid ${BORDER_H}`, borderRadius: 8,
-    padding: '8px 11px', color: TEXT, fontSize: '0.875rem',
-    outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box',
+    border: `4px solid ${border}`, borderRadius: '1.5rem',
+    backgroundColor: dark ? C.navyL : C.white,
+    color: dark ? C.neon : C.navy, padding: '0.75rem 1rem',
+    fontFamily: 'system-ui, sans-serif', fontSize: '1rem',
+    boxShadow: `2px 2px 0 ${border}`, outline: 'none', width: '100%',
   };
 
-  const sel: React.CSSProperties = {
-    flex: 1, backgroundColor: 'rgba(255,255,255,0.04)',
-    border: `1px solid ${BORDER}`, borderRadius: 8,
-    padding: '6px 8px', color: TEXT, fontSize: '0.8125rem',
-    outline: 'none', fontFamily: 'inherit',
+  const nav = [
+    { id: 'home' as Page, label: 'Home', Icon: Home },
+    { id: 'learning' as Page, label: 'AccessSTEM AI', Icon: Brain },
+    { id: 'quiz' as Page, label: 'Quiz', Icon: BookOpen },
+    { id: 'dashboard' as Page, label: 'Dashboard', Icon: BarChart3 },
+    { id: 'scholarship' as Page, label: 'Scholarship Advisor', Icon: DollarSign },
+  ];
+
+  const go = (p: Page) => { setPage(p); setMobileOpen(false); };
+
+  const doLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (email && pass) {
+      setUser({ email, name: uname || email.split('@')[0], isFGLI: fgli });
+      setLoggedIn(true);
+      go('dashboard');
+    }
+  };
+
+  const doSearch = () => {
+    if (query.trim()) {
+      setAiResp(`Topic: ${query}\n\nKey concepts:\n• Fundamental principles and definitions\n• Mathematical relationships and formulas\n• Real-world applications in STEM\n\n"Understanding this topic is essential for STEM success." — TUTall AI`);
+    }
+  };
+
+  const selectAns = (i: number) => { if (!answered) setSel(i); };
+
+  const submit = () => {
+    if (sel !== null && !answered) {
+      setAnswered(true);
+      if (sel === QUIZ[qIdx].correct) setScore(s => s + 1);
+    }
+  };
+
+  const next = () => {
+    if (qIdx < QUIZ.length - 1) {
+      setQIdx(q => q + 1); setSel(null); setHint(false); setAnswered(false);
+    } else {
+      setDone(true);
+      setAcc(Math.round(((sel === QUIZ[qIdx].correct ? score + 1 : score) / QUIZ.length) * 100));
+    }
+  };
+
+  const reset = () => { setQIdx(0); setSel(null); setHint(false); setScore(0); setDone(false); setAnswered(false); };
+
+  const calcFit = () => {
+    let s = 50;
+    const g = parseFloat(gpa) || 0;
+    if (g >= 3.8) s += 20; else if (g >= 3.5) s += 15; else if (g >= 3.0) s += 10;
+    if (fg) s += 15; if (fin) s += 15; if (major) s += 5;
+    const capped = Math.min(100, Math.max(0, s));
+    setFitScore(capped); setReady(capped);
   };
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: BG, color: TEXT, fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", overflowX: 'hidden', position: 'relative' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: bg, color: fg2, fontFamily: 'system-ui, sans-serif', transition: 'background-color 0.4s, color 0.3s' }}>
 
-      {/* ── Ambient glow overlay (RAF-driven, zero React state) ── */}
-      <div ref={glowRef} style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0 }} />
+      {/* Custom Cursor */}
+      <div style={{ position:'fixed', inset:0, pointerEvents:'none', zIndex:9999, background:`radial-gradient(600px circle at ${cx}px ${cy}px, rgba(255,255,255,0.08), transparent 42%)` }} className="hidden md:block" />
+      <div style={{ position:'fixed', left:cx, top:cy, width: hover?12:8, height: hover?12:8, backgroundColor: dark?C.neon:C.navy, borderRadius:'50%', pointerEvents:'none', zIndex:10001, transform:'translate(-50%,-50%)', transition:'all 0.15s' }} className="hidden md:block" />
+      <div style={{ position:'fixed', left:cx, top:cy, width: hover?56:34, height: hover?56:34, border:`2px solid ${hover?C.chroma:border}`, borderRadius:'50%', pointerEvents:'none', zIndex:10000, transform:'translate(-50%,-50%)', transition:'all 0.15s' }} className="hidden md:block" />
 
-      {/* ── Custom cursor (desktop only) ── */}
-      <div ref={dotRef}  className="cur-dot"  style={{ left: -999, top: -999 }} />
-      <div ref={ringRef} className="cur-ring" style={{ left: -999, top: -999 }} />
-
-      {/* ──────────────── NAVBAR ──────────────── */}
-      <nav style={{ position: 'fixed', top: 0, left: 0, right: 0, zIndex: 50,
-        backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)',
-        backgroundColor: 'rgba(9,9,11,0.82)', borderBottom: `1px solid ${BORDER}` }}>
-        <div style={{ maxWidth: 1160, margin: '0 auto', padding: '0 1.5rem', height: 58,
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-
+      {/* Navbar */}
+      <nav style={{ position:'fixed', top:0, left:0, right:0, zIndex:50, backdropFilter:'blur(12px)', WebkitBackdropFilter:'blur(12px)', backgroundColor: dark?'rgba(27,60,83,0.8)':'rgba(255,255,255,0.8)', borderBottom:`4px solid ${border}` }}>
+        <div style={{ maxWidth:1280, margin:'0 auto', padding:'0.75rem 1rem', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
           {/* Logo */}
-          <a href="#hero" style={{ display: 'flex', alignItems: 'center', gap: 9, textDecoration: 'none' }}>
-            <div style={{ width: 30, height: 30, borderRadius: 8,
-              background: `linear-gradient(135deg, ${EM} 0%, ${VIO} 100%)`,
-              display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <Code2 size={15} color="#fff" />
+          <button onClick={() => go('home')} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+            style={{ display:'flex', alignItems:'center', gap:'0.5rem', background:'none', border:'none', cursor:'none' }}>
+            <div style={{ padding:'0.5rem', borderRadius:'0.75rem', backgroundColor: dark?C.chroma:C.navy }}>
+              <GraduationCap size={24} style={{ color: dark?C.navy:C.white }} />
             </div>
-            <span style={{ fontWeight: 700, fontSize: '0.9375rem', color: TEXT, letterSpacing: '-0.025em' }}>
-              Alex Chen
-            </span>
-          </a>
+            <span style={{ fontFamily:"'Platypi',Georgia,serif", fontSize:'1.5rem', fontWeight:700, color:fg2 }}>TUTall</span>
+          </button>
 
-          {/* Nav links */}
-          <div className="nav-links" style={{ gap: '0.25rem', alignItems: 'center' }}>
-            {[['hero','Home'],['projects','Projects'],['board','Board']].map(([id, label]) => (
-              <a key={id} href={`#${id}`}
-                style={{ padding: '6px 13px', borderRadius: 8, fontSize: '0.875rem', fontWeight: 500,
-                  textDecoration: 'none', transition: 'all 0.18s ease',
-                  color: activeSec === id ? TEXT : MUTED,
-                  backgroundColor: activeSec === id ? SURF_H : 'transparent',
-                  border: activeSec === id ? `1px solid ${BORDER}` : '1px solid transparent' }}>
-                {label}
-              </a>
+          {/* Desktop nav links */}
+          <div style={{ display:'flex', gap:'0.5rem' }} className="hidden lg:flex">
+            {nav.map(({ id, label, Icon }) => (
+              <button key={id} onClick={() => go(id)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+                style={{ display:'flex', alignItems:'center', gap:'0.5rem', padding:'0.5rem 1rem', borderRadius:9999, border:'none', cursor:'none', fontFamily:"'Roboto Slab',serif", fontWeight:600, transition:'all 0.2s',
+                  backgroundColor: page===id ? (dark?C.chroma:C.navy) : 'transparent',
+                  color: page===id ? (dark?C.navy:C.white) : fg2 }}>
+                <Icon size={18} /><span>{label}</span>
+              </button>
             ))}
           </div>
 
-          {/* Actions */}
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <a href="https://github.com" target="_blank" rel="noreferrer"
-              style={{ padding: 8, borderRadius: 8, color: MUTED, textDecoration: 'none', display: 'flex',
-                transition: 'color 0.18s', border: `1px solid transparent` }}>
-              <Github size={17} />
-            </a>
-            <a href="mailto:alex@example.com"
-              style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8,
-                backgroundColor: EM, color: '#fff', textDecoration: 'none',
-                fontSize: '0.8125rem', fontWeight: 600, transition: 'opacity 0.18s',
-                boxShadow: `0 0 20px ${EM}40` }}>
-              <Mail size={13} /> Hire Me
-            </a>
+          {/* Right controls */}
+          <div style={{ display:'flex', gap:'0.75rem', alignItems:'center' }}>
+            <button onClick={() => setDark(!dark)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+              style={btn(cardBg, fg2, { padding:'0.5rem' })}>
+              {dark ? <Sun size={20} color={C.neon} /> : <Moon size={20} color={C.navy} />}
+            </button>
+            {loggedIn
+              ? <button onClick={() => { setLoggedIn(false); setUser(null); go('home'); }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(C.sageMid, C.navy)}>
+                  <User size={18} /><span className="hidden sm:inline">{user?.name}</span>
+                </button>
+              : <button onClick={() => go('login')} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white)}>
+                  <LogIn size={18} /><span className="hidden sm:inline">Log In</span>
+                </button>
+            }
+            <button onClick={() => setMobileOpen(!mobileOpen)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+              style={btn(cardBg, fg2, { padding:'0.5rem' })} className="lg:hidden">
+              {mobileOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
           </div>
         </div>
+
+        {/* Mobile menu */}
+        {mobileOpen && (
+          <div style={{ borderTop:`4px solid ${border}`, backgroundColor:cardBg, padding:'1rem' }} className="lg:hidden">
+            {nav.map(({ id, label, Icon }) => (
+              <button key={id} onClick={() => go(id)} style={{ display:'flex', width:'100%', gap:'0.75rem', alignItems:'center', padding:'0.75rem 1rem', marginBottom:'0.25rem', borderRadius:'1rem', border:'none', cursor:'none', fontFamily:"'Roboto Slab',serif",
+                backgroundColor: page===id?(dark?C.chroma:C.navy):'transparent', color: page===id?(dark?C.navy:C.white):fg2 }}>
+                <Icon size={20} /><span>{label}</span>
+              </button>
+            ))}
+          </div>
+        )}
       </nav>
 
-      {/* ──────────────── HERO ──────────────── */}
-      <section id="hero" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center',
-        justifyContent: 'center', padding: '7rem 1.5rem 5rem', position: 'relative', zIndex: 1 }}>
+      {/* Content */}
+      <main style={{ paddingTop:'6rem', paddingBottom:'3rem', maxWidth:1280, margin:'0 auto', padding:'6rem 1rem 3rem' }}>
 
-        {/* Static bg gradient mesh */}
-        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', zIndex: 0, pointerEvents: 'none' }}>
-          <div style={{ position: 'absolute', top: '8%', left: '12%', width: 700, height: 700, borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(16,185,129,0.065) 0%, transparent 65%)', filter: 'blur(48px)' }} />
-          <div style={{ position: 'absolute', bottom: '10%', right: '8%', width: 560, height: 560, borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(139,92,246,0.065) 0%, transparent 65%)', filter: 'blur(48px)' }} />
-          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 400, height: 400, borderRadius: '50%',
-            background: 'radial-gradient(circle, rgba(6,182,212,0.025) 0%, transparent 65%)', filter: 'blur(60px)' }} />
-        </div>
-
-        <div style={{ position: 'relative', zIndex: 1, maxWidth: 760, margin: '0 auto', textAlign: 'center' }}>
-          {/* Status badge */}
-          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '5px 13px',
-            borderRadius: 9999, border: `1px solid ${EM}40`, backgroundColor: `${EM}0d`, marginBottom: '1.75rem' }}>
-            <div style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: EM,
-              boxShadow: `0 0 8px ${EM}, 0 0 16px ${EM}70` }} />
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, color: EM,
-              letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-              Open to opportunities
-            </span>
-          </div>
-
-          {/* Headline */}
-          <h1 style={{ fontSize: 'clamp(3.25rem, 8.5vw, 5.75rem)', fontWeight: 800, lineHeight: 1.04,
-            letterSpacing: '-0.045em', margin: '0 0 1.25rem' }}>
-            <span style={{ color: TEXT }}>Full-Stack</span>
-            <br />
-            <span style={{ background: `linear-gradient(125deg, ${EM} 0%, ${CYN} 45%, ${VIO} 100%)`,
-              WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
-              Engineer
-            </span>
-          </h1>
-
-          <p style={{ fontSize: '1.1rem', color: MUTED, maxWidth: 500, margin: '0 auto 2.75rem', lineHeight: 1.75 }}>
-            I build high-performance web applications with obsessive attention to developer experience, accessibility, and design craft.
-          </p>
-
-          {/* CTAs */}
-          <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginBottom: '4.5rem' }}>
-            <a href="#projects"
-              style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '12px 24px', borderRadius: 10,
-                backgroundColor: EM, color: '#fff', fontWeight: 600, textDecoration: 'none',
-                fontSize: '0.9375rem', transition: 'opacity 0.18s, transform 0.18s',
-                boxShadow: `0 0 30px ${EM}45`, willChange: 'transform' }}>
-              View Projects <ChevronRight size={16} />
-            </a>
-            <a href="#board"
-              style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '12px 24px', borderRadius: 10,
-                border: `1px solid ${BORDER_H}`, color: TEXT, fontWeight: 600, textDecoration: 'none',
-                fontSize: '0.9375rem', transition: 'border-color 0.18s, background 0.18s',
-                backgroundColor: SURF, backdropFilter: 'blur(8px)' }}>
-              Open Board <Layers size={16} />
-            </a>
-          </div>
-
-          {/* Stats bar */}
-          <div className="stats-grid" style={{ maxWidth: 440, margin: '0 auto',
-            backgroundColor: BORDER, borderRadius: 14, overflow: 'hidden',
-            border: `1px solid ${BORDER}` }}>
-            {[['6+', 'Years Exp.'], ['40+', 'Projects'], ['12k+', 'Commits']].map(([v, l]) => (
-              <div key={l} style={{ padding: '1.25rem 0.75rem', backgroundColor: SURF, textAlign: 'center' }}>
-                <div style={{ fontSize: '1.875rem', fontWeight: 800, letterSpacing: '-0.05em', color: TEXT }}>{v}</div>
-                <div style={{ fontSize: '0.7rem', color: MUTED, marginTop: 4, fontWeight: 500, letterSpacing: '0.04em' }}>{l}</div>
+        {/* HOME */}
+        {page === 'home' && (
+          <div style={{ animation:'fadeIn 0.4s ease-out' }}>
+            {/* Hero */}
+            <section style={{ textAlign:'center', padding:'3rem 0' }}>
+              <div style={{ ...card(), display:'inline-flex', alignItems:'center', gap:'0.5rem', padding:'0.5rem 1rem', marginBottom:'1.5rem' }}>
+                <Sparkles size={20} color={C.chroma} />
+                <span style={{ fontFamily:"'Roboto Slab',serif", color:fg2 }}>AI-Powered Learning for FGLI Scholars</span>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
+              <h1 style={{ fontFamily:"'Platypi',Georgia,serif", fontSize:'clamp(2.5rem,6vw,4.5rem)', fontWeight:700, lineHeight:1.1, marginBottom:'1.5rem' }}>
+                <span style={{ color:fg2 }}>Learn smarter.<br />Plan better.<br /></span>
+                <span style={{ color: dark?C.chroma:C.sageMid }}>Leveling the playing field.</span>
+              </h1>
+              <p style={{ color:sub, fontSize:'1.125rem', maxWidth:'42rem', margin:'0 auto 2rem', lineHeight:1.6 }}>
+                TUTall demystifies the hidden curriculum for First-Generation and Low-Income STEM students through AI tutoring, scholarship guidance, and personalized academic planning.
+              </p>
+              <div style={{ display:'flex', gap:'1rem', justifyContent:'center', flexWrap:'wrap' }}>
+                <button onClick={() => go('learning')} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+                  style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white, { fontSize:'1.1rem', padding:'1rem 2rem' })}>
+                  Start Learning Free <ArrowRight size={20} />
+                </button>
+                <button onClick={() => go('scholarship')} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+                  style={btn(C.sageMid, C.navy, { fontSize:'1.1rem', padding:'1rem 2rem' })}>
+                  Explore Grants <DollarSign size={20} />
+                </button>
+              </div>
+            </section>
 
-      {/* ──────────────── PROJECTS ──────────────── */}
-      <section id="projects" style={{ padding: '6rem 1.5rem', maxWidth: 1160, margin: '0 auto', position: 'relative', zIndex: 1 }}>
-        <div style={{ marginBottom: '3rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-            <div style={{ width: 22, height: 2, backgroundColor: EM, borderRadius: 2 }} />
-            <span style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.12em',
-              textTransform: 'uppercase', color: EM }}>Selected Work</span>
-          </div>
-          <h2 style={{ fontSize: 'clamp(2rem, 4vw, 3rem)', fontWeight: 800,
-            letterSpacing: '-0.04em', color: TEXT, margin: 0 }}>Projects</h2>
-        </div>
-
-        <div className="projects-grid">
-          {PROJECTS.map(p => (
-            <div key={p.id}
-              style={{ ...card(), display: 'flex', flexDirection: 'column' }}
-              onMouseEnter={hIn(p.accent)}
-              onMouseLeave={hOut}>
-              <div style={{ width: 28, height: 3, backgroundColor: p.accent, borderRadius: 2, marginBottom: '1rem' }} />
-              <h3 style={{ fontSize: '1.0625rem', fontWeight: 700, letterSpacing: '-0.025em', color: TEXT, margin: '0 0 0.5rem' }}>{p.name}</h3>
-              <p style={{ fontSize: '0.8375rem', color: MUTED, lineHeight: 1.65, margin: '0 0 1.125rem', flex: 1 }}>{p.desc}</p>
-              <div style={{ display: 'flex', gap: 5, flexWrap: 'wrap', marginBottom: '1rem' }}>
-                {p.stack.map(s => (
-                  <span key={s} style={{ fontSize: '0.6875rem', fontWeight: 600, padding: '2px 7px',
-                    borderRadius: 5, backgroundColor: 'rgba(255,255,255,0.04)',
-                    color: MUTED, border: `1px solid ${BORDER}`, letterSpacing: '0.02em' }}>{s}</span>
+            {/* Bento Grid */}
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(300px,1fr))', gap:'1.5rem', marginBottom:'4rem' }}>
+              <div style={{ ...card({ backgroundColor: dark?'rgba(196,69,69,0.12)':cardBg }), padding:'1.5rem' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', marginBottom:'1rem' }}>
+                  <AlertTriangle color={C.ruby} size={24} />
+                  <h2 style={{ fontFamily:"'Platypi',serif", fontSize:'1.5rem', fontWeight:700, color:fg2, margin:0 }}>FGLI Barriers</h2>
+                </div>
+                {['Hidden curriculum & unwritten rules','Limited tutoring & test prep access','Complex financial aid navigation','Lack of STEM mentorship'].map((t,i) => (
+                  <div key={i} style={{ display:'flex', gap:'0.5rem', alignItems:'flex-start', marginBottom:'0.75rem' }}>
+                    <XCircle size={18} color={C.ruby} style={{ marginTop:2, flexShrink:0 }} />
+                    <span style={{ color:sub }}>{t}</span>
+                  </div>
                 ))}
               </div>
-              <div style={{ display: 'flex', gap: 12 }}>
-                <a href="#" style={{ display: 'flex', alignItems: 'center', gap: 5,
-                  fontSize: '0.8125rem', color: p.accent, textDecoration: 'none', fontWeight: 600 }}>
-                  <Github size={13} /> Code
-                </a>
-                <a href="#" style={{ display: 'flex', alignItems: 'center', gap: 5,
-                  fontSize: '0.8125rem', color: MUTED, textDecoration: 'none', fontWeight: 600 }}>
-                  <ExternalLink size={13} /> Live
-                </a>
-              </div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ──────────────── KANBAN BOARD ──────────────── */}
-      <section id="board" style={{ padding: '6rem 1.5rem', position: 'relative', zIndex: 1 }}>
-        <div style={{ maxWidth: 1160, margin: '0 auto' }}>
-
-          {/* Board header */}
-          <div style={{ marginBottom: '2rem', display: 'flex', alignItems: 'flex-end',
-            justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                <div style={{ width: 22, height: 2, backgroundColor: VIO, borderRadius: 2 }} />
-                <span style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: '0.12em',
-                  textTransform: 'uppercase', color: VIO }}>Task Manager</span>
-              </div>
-              <h2 style={{ fontSize: 'clamp(2rem, 4vw, 3rem)', fontWeight: 800,
-                letterSpacing: '-0.04em', color: TEXT, margin: 0 }}>Kanban Board</h2>
-            </div>
-            <span style={{ fontSize: '0.8125rem', color: MUTED, padding: '6px 12px',
-              borderRadius: 8, border: `1px solid ${BORDER}`, backgroundColor: SURF,
-              display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Sparkles size={13} color={VIO} />
-              {tasks.length} tasks
-            </span>
-          </div>
-
-          {/* 3-column grid */}
-          <div className="kanban-grid">
-            {COLS.map(col => {
-              const colTasks = tasks.filter(t => t.col === col.id);
-              const isAdding = addingTo === col.id;
-              return (
-                <div key={col.id} style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-
-                  {/* Column header */}
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                    padding: '0.375rem 0', marginBottom: '0.125rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <div style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: col.dot,
-                        boxShadow: col.dot !== SUBTLE ? `0 0 6px ${col.dot}` : 'none' }} />
-                      <span style={{ fontSize: '0.875rem', fontWeight: 600, color: TEXT }}>{col.label}</span>
-                      <span style={{ fontSize: '0.7rem', color: MUTED, backgroundColor: SURF,
-                        border: `1px solid ${BORDER}`, borderRadius: 9999,
-                        padding: '1px 7px', fontWeight: 700 }}>{colTasks.length}</span>
-                    </div>
-                    <button
-                      style={iconBtn()}
-                      onMouseEnter={btnIn}
-                      onMouseLeave={btnOut}
-                      onClick={() => { setAddingTo(isAdding ? null : col.id); setNewTitle(''); }}>
-                      {isAdding ? <X size={13} /> : <Plus size={13} />}
-                    </button>
-                  </div>
-
-                  {/* Add task form */}
-                  {isAdding && (
-                    <div style={{ padding: '0.875rem', borderRadius: 12,
-                      border: `1px solid ${VIO}40`, backgroundColor: `${VIO}08`,
-                      display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                      <input
-                        autoFocus
-                        value={newTitle}
-                        onChange={e => setNewTitle(e.target.value)}
-                        onKeyDown={e => { if (e.key === 'Enter') addTask(); if (e.key === 'Escape') setAddingTo(null); }}
-                        placeholder="Task title…"
-                        style={inp}
-                      />
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <select value={newTag} onChange={e => setNewTag(e.target.value as Tag)} style={sel}>
-                          {(['Dev','Design','Research','Bug','Feature'] as Tag[]).map(t => (
-                            <option key={t} value={t}>{t}</option>
-                          ))}
-                        </select>
-                        <select value={newPri} onChange={e => setNewPri(e.target.value as Priority)} style={sel}>
-                          {(['high','med','low'] as Priority[]).map(p => (
-                            <option key={p} value={p}>{p.charAt(0).toUpperCase() + p.slice(1)}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        <button onClick={addTask}
-                          style={{ flex: 1, padding: '7px 0', borderRadius: 8,
-                            backgroundColor: VIO, color: '#fff', border: 'none',
-                            fontWeight: 600, fontSize: '0.8125rem', cursor: 'pointer',
-                            transition: 'opacity 0.15s', fontFamily: 'inherit' }}>
-                          Add
-                        </button>
-                        <button onClick={() => setAddingTo(null)}
-                          style={{ padding: '7px 10px', borderRadius: 8,
-                            backgroundColor: SURF, color: MUTED,
-                            border: `1px solid ${BORDER}`, cursor: 'pointer',
-                            transition: 'all 0.15s', display: 'flex', alignItems: 'center' }}>
-                          <X size={13} />
-                        </button>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Task cards */}
-                  {colTasks.map(task => (
-                    <div key={task.id}
-                      style={{ padding: '0.875rem 1rem', borderRadius: 12,
-                        border: `1px solid ${BORDER}`, backgroundColor: SURF,
-                        transition: 'border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease',
-                        willChange: 'transform, border-color, background-color' }}
-                      onMouseEnter={e => {
-                        const el = e.currentTarget;
-                        el.style.borderColor = BORDER_H;
-                        el.style.backgroundColor = SURF_H;
-                        el.style.transform = 'translateY(-1px)';
-                      }}
-                      onMouseLeave={e => {
-                        const el = e.currentTarget;
-                        el.style.borderColor = BORDER;
-                        el.style.backgroundColor = SURF;
-                        el.style.transform = 'translateY(0)';
-                      }}>
-
-                      <div style={{ display: 'flex', alignItems: 'flex-start',
-                        justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.625rem' }}>
-                        <p style={{ margin: 0, fontSize: '0.8625rem', fontWeight: 500,
-                          color: TEXT, lineHeight: 1.5, flex: 1 }}>{task.title}</p>
-                        <button onClick={() => delTask(task.id)}
-                          style={{ padding: 4, borderRadius: 6, border: 'none',
-                            backgroundColor: 'transparent', color: SUBTLE,
-                            cursor: 'pointer', flexShrink: 0, display: 'flex',
-                            transition: 'color 0.12s' }}
-                          onMouseEnter={e => (e.currentTarget.style.color = RED)}
-                          onMouseLeave={e => (e.currentTarget.style.color = SUBTLE)}>
-                          <Trash2 size={12} />
-                        </button>
-                      </div>
-
-                      {/* Tags + move controls */}
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          <span style={pill(tColor(task.tag))}>{task.tag}</span>
-                          <span style={pill(pColor(task.priority))}>{task.priority}</span>
-                        </div>
-                        <div style={{ display: 'flex', gap: 2 }}>
-                          {col.id !== 'todo' && (
-                            <button onClick={() => moveTask(task.id, 'l')}
-                              style={{ padding: 4, borderRadius: 5, border: 'none',
-                                backgroundColor: 'transparent', color: SUBTLE,
-                                cursor: 'pointer', display: 'flex', transition: 'color 0.12s' }}
-                              onMouseEnter={e => (e.currentTarget.style.color = TEXT)}
-                              onMouseLeave={e => (e.currentTarget.style.color = SUBTLE)}>
-                              <ChevronLeft size={12} />
-                            </button>
-                          )}
-                          {col.id !== 'done' && (
-                            <button onClick={() => moveTask(task.id, 'r')}
-                              style={{ padding: 4, borderRadius: 5, border: 'none',
-                                backgroundColor: 'transparent', color: SUBTLE,
-                                cursor: 'pointer', display: 'flex', transition: 'color 0.12s' }}
-                              onMouseEnter={e => (e.currentTarget.style.color = TEXT)}
-                              onMouseLeave={e => (e.currentTarget.style.color = SUBTLE)}>
-                              <ChevronRight size={12} />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Empty state */}
-                  {colTasks.length === 0 && !isAdding && (
-                    <div style={{ padding: '2rem 1rem', borderRadius: 12,
-                      border: `1px dashed ${SUBTLE}60`, textAlign: 'center',
-                      color: SUBTLE, fontSize: '0.8125rem' }}>
-                      Drop tasks here
-                    </div>
-                  )}
+              <div style={{ ...card({ backgroundColor: dark?'rgba(91,126,60,0.15)':cardBg }), padding:'1.5rem' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', marginBottom:'1rem' }}>
+                  <CheckCircle color={dark?C.chroma:C.moss} size={24} />
+                  <h2 style={{ fontFamily:"'Platypi',serif", fontSize:'1.5rem', fontWeight:700, color:fg2, margin:0 }}>TUTall Solutions</h2>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
+                {['AI that decodes academic expectations','Free 24/7 STEM tutoring, low-bandwidth ready','Smart scholarship matching & guidance','Personalized learning paths & tracking'].map((t,i) => (
+                  <div key={i} style={{ display:'flex', gap:'0.5rem', alignItems:'flex-start', marginBottom:'0.75rem' }}>
+                    <CheckCircle size={18} color={dark?C.chroma:C.moss} style={{ marginTop:2, flexShrink:0 }} />
+                    <span style={{ color:sub }}>{t}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
 
-      {/* ──────────────── FOOTER ──────────────── */}
-      <footer style={{ padding: '2.5rem 1.5rem', borderTop: `1px solid ${BORDER}`,
-        position: 'relative', zIndex: 1 }}>
-        <div style={{ maxWidth: 1160, margin: '0 auto',
-          display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
+            {/* Metrics */}
+            <div style={{ ...card(), padding:'2rem' }}>
+              <h2 style={{ fontFamily:"'Platypi',serif", fontSize:'1.875rem', fontWeight:700, color:fg2, textAlign:'center', marginBottom:'2rem' }}>Built for Equity</h2>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:'1.5rem', textAlign:'center' }}>
+                {[['100%','Free Forever'],['256-bit','Encrypted'],['< 2MB','Low-Bandwidth'],['24/7','AI Access']].map(([v,l]) => (
+                  <div key={l}>
+                    <div style={{ fontFamily:"'Platypi',serif", fontSize:'2.25rem', fontWeight:700, color:dark?C.chroma:C.moss }}>{v}</div>
+                    <div style={{ color:sub, marginTop:'0.25rem' }}>{l}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* LOGIN */}
+        {page === 'login' && (
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:'70vh' }}>
+            <div style={{ ...card(), padding:'2rem', width:'100%', maxWidth:420 }}>
+              {/* Toggle */}
+              <div style={{ display:'flex', border:`4px solid ${border}`, borderRadius:9999, overflow:'hidden', marginBottom:'1.5rem' }}>
+                {(['in','up'] as const).map(m => (
+                  <button key={m} onClick={() => setLmode(m)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+                    style={{ flex:1, padding:'0.75rem', border:'none', cursor:'none', fontFamily:"'Roboto Slab',serif", fontWeight:600,
+                      backgroundColor: lmode===m?(dark?C.chroma:C.navy):(dark?C.navyL:C.white),
+                      color: lmode===m?(dark?C.navy:C.white):(dark?C.neon:C.navy) }}>
+                    {m==='in'?'Welcome Back':'Create Account'}
+                  </button>
+                ))}
+              </div>
+              <h2 style={{ fontFamily:"'Platypi',serif", fontSize:'1.5rem', fontWeight:700, color:fg2, textAlign:'center', marginBottom:'1.5rem' }}>
+                {lmode==='in'?'Sign In to TUTall':'Create Your FGLI Account'}
+              </h2>
+              <form onSubmit={doLogin} style={{ display:'flex', flexDirection:'column', gap:'1rem' }}>
+                {lmode==='up' && <div><label style={{ display:'block', fontFamily:"'Roboto Slab',serif", color:fg2, marginBottom:6 }}>Full Name</label><input style={inp} value={uname} onChange={e=>setUname(e.target.value)} placeholder="Your name" /></div>}
+                <div><label style={{ display:'block', fontFamily:"'Roboto Slab',serif", color:fg2, marginBottom:6 }}>Email</label><input style={inp} type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@university.edu" /></div>
+                <div><label style={{ display:'block', fontFamily:"'Roboto Slab',serif", color:fg2, marginBottom:6 }}>Password</label><input style={inp} type="password" value={pass} onChange={e=>setPass(e.target.value)} placeholder="••••••••" /></div>
+                {lmode==='up' && (
+                  <div style={{ padding:'1rem', borderRadius:'1rem', border:`4px solid ${dark?C.chroma:C.sageMid}`, backgroundColor: dark?'rgba(91,126,60,0.2)':'rgba(144,171,139,0.2)' }}>
+                    <label style={{ display:'flex', gap:'0.75rem', alignItems:'flex-start', cursor:'none' }}>
+                      <input type="checkbox" checked={fgli} onChange={e=>setFgli(e.target.checked)} style={{ width:20, height:20, marginTop:2 }} />
+                      <div>
+                        <div style={{ fontFamily:"'Roboto Slab',serif", color:fg2, fontWeight:600 }}>I identify as First-Generation / Low-Income (FGLI)</div>
+                        <div style={{ color:sub, fontSize:'0.875rem', marginTop:4 }}>We'll tailor your dashboard for specialized equity grants!</div>
+                      </div>
+                    </label>
+                  </div>
+                )}
+                <button type="submit" onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+                  style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white, { width:'100%', padding:'1rem', fontSize:'1.1rem' })}>
+                  {lmode==='in'?'Sign In':'Create Account'}
+                </button>
+              </form>
+              <p style={{ textAlign:'center', color:sub, marginTop:'1.5rem', fontSize:'0.875rem' }}>
+                {lmode==='in'?'No account? ':'Have an account? '}
+                <button onClick={() => setLmode(lmode==='in'?'up':'in')} style={{ color:dark?C.chroma:C.sageMid, background:'none', border:'none', cursor:'none', fontFamily:"'Roboto Slab',serif", fontWeight:600, textDecoration:'underline' }}>
+                  {lmode==='in'?'Sign up':'Sign in'}
+                </button>
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* LEARNING */}
+        {page === 'learning' && (
           <div>
-            <div style={{ fontWeight: 700, fontSize: '0.9rem', color: TEXT, marginBottom: 4 }}>Alex Chen</div>
-            <div style={{ fontSize: '0.8125rem', color: MUTED }}>Full-Stack Engineer · Available for hire</div>
+            <div style={{ textAlign:'center', marginBottom:'2rem' }}>
+              <h1 style={{ fontFamily:"'Platypi',serif", fontSize:'2.25rem', fontWeight:700, color:fg2, margin:'0 0 0.5rem' }}>AccessSTEM AI Workbench</h1>
+              <p style={{ color:sub }}>Your personal STEM tutor, available 24/7</p>
+            </div>
+            <div style={{ ...card(), padding:'1.5rem', marginBottom:'1.5rem' }}>
+              <div style={{ display:'flex', gap:'1rem', flexWrap:'wrap' }}>
+                <div style={{ flex:1, minWidth:200, position:'relative' }}>
+                  <Search size={20} style={{ position:'absolute', left:16, top:'50%', transform:'translateY(-50%)', color:sub }} />
+                  <input style={{ ...inp, paddingLeft:'3rem', fontSize:'1.125rem' }} value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>e.key==='Enter'&&doSearch()} placeholder="What STEM topic are we mastering today?" />
+                </div>
+                <button onClick={doSearch} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white, { padding:'0.75rem 2rem', fontSize:'1rem' })}>
+                  <Sparkles size={18} /> Learn
+                </button>
+              </div>
+              <div style={{ display:'flex', gap:'0.5rem', flexWrap:'wrap', marginTop:'1rem' }}>
+                {["Newton's Laws","Binary Search","Algebraic Matrices","Photosynthesis"].map(t => (
+                  <button key={t} onClick={() => { setQuery(t); doSearch(); }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+                    style={{ padding:'0.5rem 1rem', borderRadius:9999, border:`2px solid ${border}`, backgroundColor: dark?C.navyL:C.white, color:fg2, cursor:'none', fontFamily:'system-ui,sans-serif' }}>{t}</button>
+                ))}
+              </div>
+            </div>
+            {aiResp && (
+              <div style={{ ...card({ backgroundColor: dark?'rgba(91,126,60,0.12)':'rgba(144,171,139,0.12)' }), padding:'1.5rem' }}>
+                <div style={{ display:'flex', gap:'1rem', alignItems:'flex-start', marginBottom:'1.5rem' }}>
+                  <div style={{ padding:'0.75rem', borderRadius:'1rem', backgroundColor:C.chroma, flexShrink:0 }}><Brain size={24} color={C.navy} /></div>
+                  <pre style={{ fontFamily:'system-ui,sans-serif', color:fg2, whiteSpace:'pre-wrap', lineHeight:1.6, margin:0, flex:1 }}>{aiResp}</pre>
+                </div>
+                <div style={{ display:'flex', gap:'0.75rem', flexWrap:'wrap', paddingTop:'1.5rem', borderTop:`4px solid ${border}` }}>
+                  <button onClick={() => go('quiz')} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white)}><BookOpen size={18} /> Generate Practice Quiz</button>
+                  <button onClick={() => { if(query && !saved.includes(query)) { setSaved([...saved,query]); setMods(m=>m+1); } }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(C.sageMid, C.navy)}><Heart size={18} /> Save to Dashboard</button>
+                  <button onClick={() => setLoBw(!loBw)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(loBw?C.moss:C.sand, loBw?C.white:C.navy)}><Globe size={18} /> Low-BW: {loBw?'ON':'OFF'}</button>
+                </div>
+              </div>
+            )}
+            {saved.length > 0 && (
+              <div style={{ ...card(), padding:'1.5rem', marginTop:'1.5rem' }}>
+                <p style={{ fontFamily:"'Roboto Slab',serif", color:fg2, marginBottom:'0.75rem', fontWeight:600 }}>Saved Topics</p>
+                <div style={{ display:'flex', gap:'0.5rem', flexWrap:'wrap' }}>
+                  {saved.map((t,i) => <span key={i} style={{ padding:'0.25rem 0.75rem', borderRadius:9999, backgroundColor: dark?'rgba(162,203,139,0.3)':'rgba(144,171,139,0.3)', color:fg2, fontSize:'0.875rem' }}>{t}</span>)}
+                </div>
+              </div>
+            )}
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            {[Github, Mail, Globe].map((Icon, i) => (
-              <a key={i} href="#"
-                style={{ width: 34, height: 34, borderRadius: 8, border: `1px solid ${BORDER}`,
-                  backgroundColor: SURF, display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: MUTED, textDecoration: 'none', transition: 'all 0.18s' }}>
-                <Icon size={15} />
-              </a>
-            ))}
+        )}
+
+        {/* QUIZ */}
+        {page === 'quiz' && (
+          <div style={{ maxWidth:640, margin:'0 auto' }}>
+            {!done ? (
+              <>
+                {/* Progress */}
+                <div style={{ ...card(), padding:'1rem', marginBottom:'1.5rem' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.75rem' }}>
+                    <span style={{ fontFamily:"'Roboto Slab',serif", color:fg2 }}>Question {qIdx+1} of {QUIZ.length}</span>
+                    <span style={{ color:sub }}>Topic: {QUIZ[qIdx].topic}</span>
+                  </div>
+                  <div style={{ height:12, borderRadius:9999, backgroundColor: dark?C.navyL:C.sand, overflow:'hidden' }}>
+                    <div style={{ height:'100%', backgroundColor: dark?C.chroma:C.moss, width:`${((qIdx+1)/QUIZ.length)*100}%`, transition:'width 0.5s' }} />
+                  </div>
+                </div>
+                {/* Question */}
+                <div style={{ ...card(), padding:'1.5rem' }}>
+                  <h2 style={{ fontFamily:"'Platypi',serif", fontSize:'1.375rem', fontWeight:700, color:fg2, marginBottom:'1.5rem' }}>{QUIZ[qIdx].question}</h2>
+                  <div style={{ display:'flex', flexDirection:'column', gap:'0.75rem', marginBottom:'1.5rem' }}>
+                    {QUIZ[qIdx].options.map((opt, i) => {
+                      let bg2 = dark ? C.navyL : C.white;
+                      let bc = border;
+                      if (answered) {
+                        if (i === QUIZ[qIdx].correct) { bg2 = dark?'rgba(162,203,139,0.3)':'rgba(91,126,60,0.25)'; bc = dark?C.chroma:C.moss; }
+                        else if (i === sel) { bg2 = 'rgba(196,69,69,0.25)'; bc = C.ruby; }
+                      } else if (sel === i) { bg2 = dark?'rgba(162,203,139,0.25)':'rgba(144,171,139,0.4)'; bc = dark?C.chroma:C.sageMid; }
+                      return (
+                        <button key={i} onClick={() => selectAns(i)} disabled={answered} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+                          style={{ padding:'1rem', textAlign:'left', borderRadius:'1rem', border:`4px solid ${bc}`, backgroundColor:bg2, color:fg2, cursor:'none', transition:'all 0.15s', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                          <span>{opt}</span>
+                          {answered && i===QUIZ[qIdx].correct && <CheckCircle size={20} color={dark?C.chroma:C.moss} />}
+                          {answered && i===sel && i!==QUIZ[qIdx].correct && <XCircle size={20} color={C.ruby} />}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* Hint */}
+                  {!answered && (
+                    hint
+                      ? <div style={{ ...card({ border:`4px solid ${dark?C.chroma:C.sageMid}`, backgroundColor: dark?'rgba(91,126,60,0.2)':'rgba(144,171,139,0.2)' }), padding:'1rem', display:'flex', gap:'0.75rem', alignItems:'flex-start', marginBottom:'1rem' }}>
+                          <HelpCircle size={20} color={dark?C.chroma:C.moss} style={{flexShrink:0}} />
+                          <p style={{ color:fg2, margin:0 }}>{QUIZ[qIdx].hint}</p>
+                        </div>
+                      : <button onClick={() => setHint(true)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+                          style={btn(C.sageMid, C.navy, { marginBottom:'1rem' })}>
+                          <Lightbulb size={20} /> Stuck? Get a Guided Hint
+                        </button>
+                  )}
+                  <div style={{ display:'flex', justifyContent:'flex-end' }}>
+                    {!answered
+                      ? <button onClick={submit} disabled={sel===null} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+                          style={btn(sel!==null?(dark?C.chroma:C.navy):C.sand, sel!==null?(dark?C.navy:C.white):C.slate, { opacity: sel!==null?1:0.5 })}>
+                          Submit Answer
+                        </button>
+                      : <button onClick={next} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+                          style={btn(dark?C.chroma:C.moss, dark?C.navy:C.white)}>
+                          {qIdx<QUIZ.length-1?'Next Question':'See Results'} <ChevronRight size={18} />
+                        </button>
+                    }
+                  </div>
+                </div>
+              </>
+            ) : (
+              <div style={{ ...card(), padding:'2rem', textAlign:'center' }}>
+                <Trophy size={64} color={C.chroma} style={{ margin:'0 auto 1rem' }} />
+                <h2 style={{ fontFamily:"'Platypi',serif", fontSize:'2rem', fontWeight:700, color:fg2, marginBottom:'1.5rem' }}>Quiz Complete!</h2>
+                <div style={{ position:'relative', width:160, height:160, margin:'0 auto 1.5rem' }}>
+                  <svg viewBox="0 0 100 100" style={{ width:'100%', height:'100%', transform:'rotate(-90deg)' }}>
+                    <circle cx="50" cy="50" r="40" fill="none" stroke={dark?C.navyL:C.sand} strokeWidth="8" />
+                    <circle cx="50" cy="50" r="40" fill="none" stroke={dark?C.chroma:C.moss} strokeWidth="8"
+                      strokeDasharray="251" strokeDashoffset={251-(251*score/QUIZ.length)} strokeLinecap="round" style={{ animation:'progress-fill 1s ease-out' }} />
+                  </svg>
+                  <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                    <span style={{ fontFamily:"'Platypi',serif", fontSize:'2.5rem', fontWeight:700, color:fg2 }}>{Math.round((score/QUIZ.length)*100)}%</span>
+                  </div>
+                </div>
+                <p style={{ color:sub, marginBottom:'1.5rem' }}>You got {score} of {QUIZ.length} correct.</p>
+                <div style={{ display:'flex', gap:'1rem', justifyContent:'center', flexWrap:'wrap' }}>
+                  <button onClick={reset} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white)}>Try Again</button>
+                  <button onClick={() => go('dashboard')} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(C.sageMid, C.navy)}>View Dashboard</button>
+                </div>
+              </div>
+            )}
           </div>
+        )}
+
+        {/* DASHBOARD */}
+        {page === 'dashboard' && (
+          <div>
+            <div style={{ textAlign:'center', marginBottom:'2rem' }}>
+              <h1 style={{ fontFamily:"'Platypi',serif", fontSize:'2.25rem', fontWeight:700, color:fg2, margin:'0 0 0.5rem' }}>Welcome back, {user?.name||'Scholar'}</h1>
+              <p style={{ color:sub }}>Track your progress and continue your STEM journey</p>
+            </div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'1.5rem', marginBottom:'2rem' }}>
+              {[
+                { Icon:BookOpen, label:'Completed Modules', val:mods, dot:true },
+                { Icon:Target, label:'Quiz Accuracy', val:acc+'%', dot:acc>=70 },
+                { Icon:Award, label:'Scholarship Readiness', val:ready+'%', dot:ready>=50 },
+              ].map(({ Icon, label, val, dot }) => (
+                <div key={label} style={{ ...card(), padding:'1.5rem' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem' }}>
+                    <div style={{ padding:'0.75rem', borderRadius:'1rem', backgroundColor: dark?C.forest:C.sageMid }}>
+                      <Icon size={24} color={dark?C.neon:C.navy} />
+                    </div>
+                    <div style={{ width:12, height:12, borderRadius:'50%', backgroundColor: dot?(dark?C.chroma:C.moss):C.ruby, boxShadow: dot?`0 0 8px ${dark?C.chroma:C.moss}`:'none' }} />
+                  </div>
+                  <p style={{ fontFamily:"'Roboto Slab',serif", color:sub, margin:'0 0 0.25rem', fontSize:'0.875rem' }}>{label}</p>
+                  <p style={{ fontFamily:"'Platypi',serif", fontSize:'2.5rem', fontWeight:700, color:fg2, margin:0 }}>{val}</p>
+                </div>
+              ))}
+            </div>
+            {/* Quick Actions */}
+            <div style={{ ...card(), padding:'1.5rem' }}>
+              <h3 style={{ fontFamily:"'Platypi',serif", fontWeight:700, color:fg2, marginBottom:'1rem' }}>Quick Actions</h3>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:'1rem' }}>
+                {[
+                  { Icon:Brain, label:'Start Learning', p:'learning' as Page },
+                  { Icon:BookOpen, label:'Take Quiz', p:'quiz' as Page },
+                  { Icon:DollarSign, label:'Scholarships', p:'scholarship' as Page },
+                  { Icon:Heart, label:'Saved Topics', p:'learning' as Page },
+                ].map(({ Icon, label, p }) => (
+                  <button key={label} onClick={() => go(p)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+                    style={{ ...card({ backgroundColor: dark?'rgba(91,126,60,0.4)':'rgba(144,171,139,0.4)' }), padding:'1rem', textAlign:'center', cursor:'none', border:`4px solid ${border}` }}>
+                    <Icon size={32} color={fg2} style={{ margin:'0 auto 0.5rem' }} />
+                    <span style={{ fontFamily:"'Roboto Slab',serif", color:fg2, fontSize:'0.875rem' }}>{label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* SCHOLARSHIP */}
+        {page === 'scholarship' && (
+          <div style={{ maxWidth:896, margin:'0 auto' }}>
+            <div style={{ textAlign:'center', marginBottom:'2rem' }}>
+              <h1 style={{ fontFamily:"'Platypi',serif", fontSize:'2.25rem', fontWeight:700, color:fg2, margin:'0 0 0.5rem' }}>Scholarship & FGLI Calculator</h1>
+              <p style={{ color:sub }}>Find your best-fit opportunities and navigate the hidden curriculum</p>
+            </div>
+            <div style={{ ...card(), padding:'1.5rem', marginBottom:'2rem' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', marginBottom:'1.5rem' }}>
+                <Calculator size={24} color={dark?C.chroma:C.moss} />
+                <h2 style={{ fontFamily:"'Platypi',serif", fontWeight:700, color:fg2, margin:0 }}>Calculate Your Scholarship Fit</h2>
+              </div>
+              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))', gap:'1.5rem' }}>
+                <div><label style={{ display:'block', fontFamily:"'Roboto Slab',serif", color:fg2, marginBottom:6 }}>Current GPA</label>
+                  <input style={inp} type="number" step="0.1" min="0" max="4" value={gpa} onChange={e=>setGpa(e.target.value)} placeholder="3.5" /></div>
+                <div><label style={{ display:'block', fontFamily:"'Roboto Slab',serif", color:fg2, marginBottom:6 }}>Country</label>
+                  <select style={inp} value={country} onChange={e=>setCountry(e.target.value)}>
+                    <option value="USA">United States</option><option value="CAN">Canada</option><option value="MEX">Mexico</option><option value="other">Other</option>
+                  </select></div>
+                <div><label style={{ display:'block', fontFamily:"'Roboto Slab',serif", color:fg2, marginBottom:6 }}>STEM Major</label>
+                  <select style={inp} value={major} onChange={e=>setMajor(e.target.value)}>
+                    <option value="">Select a major</option><option value="cs">Computer Science</option><option value="eng">Engineering</option>
+                    <option value="bio">Biology</option><option value="chem">Chemistry</option><option value="math">Mathematics</option><option value="phys">Physics</option>
+                  </select></div>
+                <div style={{ display:'flex', flexDirection:'column', gap:'0.75rem', justifyContent:'center' }}>
+                  {[['First-Generation Student',fg,setFg],['Demonstrated Financial Need',fin,setFin]].map(([label, val, setter]) => (
+                    <label key={label as string} style={{ display:'flex', gap:'0.75rem', alignItems:'center', cursor:'none' }}>
+                      <input type="checkbox" checked={val as boolean} onChange={e=>(setter as (v:boolean)=>void)(e.target.checked)} style={{ width:20, height:20 }} />
+                      <span style={{ color:fg2 }}>{label as string}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <button onClick={calcFit} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white, { width:'100%', marginTop:'1.5rem', padding:'1rem', fontSize:'1.1rem' })}>
+                Calculate My Fit Score
+              </button>
+            </div>
+            {fitScore !== null && (
+              <div style={{ ...card(), padding:'2rem', textAlign:'center', marginBottom:'2rem' }}>
+                <h3 style={{ fontFamily:"'Platypi',serif", fontSize:'1.5rem', fontWeight:700, color:fg2, marginBottom:'1.5rem' }}>Scholarship Fit Score</h3>
+                <div style={{ position:'relative', width:192, height:192, margin:'0 auto 1rem' }}>
+                  <svg viewBox="0 0 100 100" style={{ width:'100%', height:'100%', transform:'rotate(-90deg)' }}>
+                    <circle cx="50" cy="50" r="40" fill="none" stroke={dark?C.navyL:C.sand} strokeWidth="10" />
+                    <circle cx="50" cy="50" r="40" fill="none" stroke={fitScore>=70?(dark?C.chroma:C.moss):C.ruby} strokeWidth="10"
+                      strokeDasharray="251" strokeDashoffset={251-(251*fitScore/100)} strokeLinecap="round" style={{ animation:'progress-fill 1s ease-out' }} />
+                  </svg>
+                  <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                    <span style={{ fontFamily:"'Platypi',serif", fontSize:'3rem', fontWeight:700, color:fg2 }}>{fitScore}%</span>
+                  </div>
+                </div>
+                <p style={{ color:sub }}>{fitScore>=70?"Excellent! You're a strong candidate.":(fitScore>=50?"Good standing. Keep building your profile.":"Keep growing your profile for more opportunities.")}</p>
+              </div>
+            )}
+            {/* Checklist */}
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(280px,1fr))', gap:'1.5rem' }}>
+              <div style={{ ...card({ backgroundColor: dark?'rgba(91,126,60,0.12)':'rgba(144,171,139,0.15)' }), padding:'1.5rem' }}>
+                <div style={{ display:'flex', gap:'0.75rem', alignItems:'center', marginBottom:'1rem' }}>
+                  <CheckCircle size={24} color={dark?C.chroma:C.moss} />
+                  <h3 style={{ fontFamily:"'Platypi',serif", fontWeight:700, color:fg2, margin:0 }}>Strengths</h3>
+                </div>
+                {['Understanding fee waiver options','Researching QuestBridge deadlines','Personal statement storytelling','Requesting strong rec letters'].map((t,i) => (
+                  <div key={i} style={{ display:'flex', gap:'0.5rem', alignItems:'center', marginBottom:'0.5rem' }}>
+                    <CheckCircle size={16} color={dark?C.chroma:C.moss} /><span style={{ color:fg2 }}>{t}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ ...card(), padding:'1.5rem' }}>
+                <div style={{ display:'flex', gap:'0.75rem', alignItems:'center', marginBottom:'1rem' }}>
+                  <AlertTriangle size={24} color={C.ruby} />
+                  <h3 style={{ fontFamily:"'Platypi',serif", fontWeight:700, color:fg2, margin:0 }}>Things to Improve</h3>
+                </div>
+                {['Build extracurricular leadership','Create a standardized test plan','Explore work-study opportunities','Connect with FGLI support networks'].map((t,i) => (
+                  <div key={i} style={{ display:'flex', gap:'0.5rem', alignItems:'center', marginBottom:'0.5rem' }}>
+                    <div style={{ width:16, height:16, border:`2px solid ${border}`, borderRadius:4, flexShrink:0 }} />
+                    <span style={{ color:fg2 }}>{t}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </main>
+
+      {/* Footer */}
+      <footer style={{ borderTop:`4px solid ${border}`, backgroundColor:cardBg, padding:'1.5rem 1rem' }}>
+        <div style={{ maxWidth:1280, margin:'0 auto', display:'flex', flexWrap:'wrap', gap:'1rem', alignItems:'center', justifyContent:'space-between' }}>
+          <div style={{ display:'flex', gap:'0.5rem', alignItems:'center' }}>
+            <GraduationCap size={24} color={fg2} />
+            <span style={{ fontFamily:"'Platypi',serif", fontSize:'1.125rem', fontWeight:700, color:fg2 }}>TUTall</span>
+          </div>
+          <p style={{ color:sub, fontSize:'0.875rem', textAlign:'center' }}>Empowering FGLI STEM students with AI-powered learning.</p>
+          <button onClick={() => setLoBw(!loBw)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
+            style={{ padding:'0.25rem 0.75rem', borderRadius:9999, border:`2px solid ${loBw?C.moss:border}`, backgroundColor:'transparent', color:loBw?C.moss:fg2, cursor:'none', fontSize:'0.875rem' }}>
+            {loBw?'Low-BW: ON':'Low-Bandwidth Mode'}
+          </button>
         </div>
       </footer>
+
+      <style>{`
+        @keyframes progress-fill { from { stroke-dashoffset: 251; } }
+        @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+      `}</style>
     </div>
   );
 }
