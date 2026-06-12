@@ -3,19 +3,16 @@ import {
   GraduationCap, Sun, Moon, Home, Brain, BookOpen, BarChart3,
   DollarSign, LogIn, User, Search, Sparkles, HelpCircle, CheckCircle,
   XCircle, ChevronRight, Target, Trophy, AlertTriangle, Lightbulb,
-  Calculator, Globe, Award, Heart, ArrowRight, Menu, X, Loader2, Wifi, WifiOff,
+  Calculator, Globe, Award, Heart, ArrowRight, Menu, X, Loader2,
 } from 'lucide-react';
 import {
-  checkHealth,
   fetchExplain,
   fetchQuiz,
   saveProgress,
   fetchDashboard,
   fetchScholarshipMatch,
-  fetchAssistant,
   formatExplainResponse,
   normalizeQuizQuestion,
-  sourceLabel,
   type QuizQuestion,
 } from './api';
 
@@ -47,7 +44,6 @@ export default function App() {
   const cursorRef = React.useRef({ x: 0, y: 0, rafId: 0 });
   const [cursorPos, setCursorPos] = useState({ x: 0, y: 0 });
   const [cursorReady, setCursorReady] = useState(false);
-  const [backendOnline, setBackendOnline] = useState<boolean | null>(null);
 
   // Login
   const [lmode, setLmode] = useState<'in'|'up'>('in');
@@ -59,14 +55,8 @@ export default function App() {
   // Learning
   const [query, setQuery] = useState('');
   const [aiResp, setAiResp] = useState('');
-  const [aiSource, setAiSource] = useState('');
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
-  const [followUp, setFollowUp] = useState('');
-  const [assistantResp, setAssistantResp] = useState('');
-  const [assistantLoading, setAssistantLoading] = useState(false);
-  const [assistantError, setAssistantError] = useState<string | null>(null);
-  const [assistantSource, setAssistantSource] = useState('');
   const [saved, setSaved] = useState<string[]>([]);
   const [loBw, setLoBw] = useState(false);
 
@@ -75,7 +65,6 @@ export default function App() {
   const [quizTopic, setQuizTopic] = useState('Photosynthesis');
   const [quizLoading, setQuizLoading] = useState(false);
   const [quizError, setQuizError] = useState<string | null>(null);
-  const [quizSource, setQuizSource] = useState('');
   const [qIdx, setQIdx] = useState(0);
   const [sel, setSel] = useState<number|null>(null);
   const [hint, setHint] = useState(false);
@@ -87,8 +76,6 @@ export default function App() {
   const [mods, setMods] = useState(0);
   const [acc, setAcc] = useState(0);
   const [ready, setReady] = useState(0);
-  const [recommendedTopic, setRecommendedTopic] = useState('');
-  const [dashboardLoading, setDashboardLoading] = useState(false);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
 
   // Scholarship
@@ -101,10 +88,8 @@ export default function App() {
   const [scholarshipSummary, setScholarshipSummary] = useState('');
   const [strengths, setStrengths] = useState<string[]>([]);
   const [improvements, setImprovements] = useState<string[]>([]);
-  const [recommendedScholarships, setRecommendedScholarships] = useState<{ name: string; fit: string; reason: string }[]>([]);
   const [scholarshipLoading, setScholarshipLoading] = useState(false);
   const [scholarshipError, setScholarshipError] = useState<string | null>(null);
-  const [scholarshipSource, setScholarshipSource] = useState('');
 
   useEffect(() => {
     let lastUpdate = 0;
@@ -143,12 +128,7 @@ export default function App() {
     document.documentElement.classList.toggle('dark', dark);
   }, [dark]);
 
-  useEffect(() => {
-    checkHealth().then(setBackendOnline);
-  }, []);
-
   const loadDashboard = async () => {
-    setDashboardLoading(true);
     setDashboardError(null);
     try {
       const data = await fetchDashboard(STUDENT_ID);
@@ -156,11 +136,8 @@ export default function App() {
       setAcc(data.quiz_accuracy ?? 0);
       setReady(data.scholarship_readiness ?? 0);
       if (data.saved_topics?.length) setSaved(data.saved_topics);
-      setRecommendedTopic(data.recommended_next_topic ?? '');
     } catch {
       setDashboardError('Could not load dashboard data. Please try again.');
-    } finally {
-      setDashboardLoading(false);
     }
   };
 
@@ -188,7 +165,6 @@ export default function App() {
       if (!questions.length) throw new Error('No questions returned');
       setQuizQuestions(questions);
       setQuizTopic(data.topic || nextTopic);
-      setQuizSource(data.source || '');
     } catch {
       setQuizQuestions([]);
       setQuizError('Could not load quiz. Please try again.');
@@ -274,45 +250,14 @@ export default function App() {
     setQuery(topic);
     setAiLoading(true);
     setAiError(null);
-    setAssistantResp('');
-    setAssistantError(null);
     try {
       const data = await fetchExplain(topic, loBw);
       setAiResp(formatExplainResponse(data));
-      setAiSource(data.source || '');
     } catch {
       setAiResp('');
       setAiError('Could not load explanation. Please try again.');
     } finally {
       setAiLoading(false);
-    }
-  };
-
-  const askFollowUp = async () => {
-    const question = followUp.trim();
-    const topic = query.trim();
-    if (!question || !topic) return;
-    setAssistantLoading(true);
-    setAssistantError(null);
-    try {
-      const data = await fetchAssistant(topic, question);
-      const parts = [data.answer];
-      if (data.key_points?.length) {
-        parts.push('\n\nKey points:');
-        data.key_points.forEach((p) => parts.push(`• ${p}`));
-      }
-      if (data.example) parts.push(`\n\nExample:\n${data.example}`);
-      if (data.next_steps?.length) {
-        parts.push('\n\nNext steps:');
-        data.next_steps.forEach((s) => parts.push(`• ${s}`));
-      }
-      setAssistantResp(parts.join('\n'));
-      setAssistantSource(data.source || '');
-      setFollowUp('');
-    } catch {
-      setAssistantError('Could not get an answer. Please try again.');
-    } finally {
-      setAssistantLoading(false);
     }
   };
 
@@ -359,26 +304,11 @@ export default function App() {
       setScholarshipSummary(data.summary || '');
       setStrengths(data.strengths || []);
       setImprovements(data.improvements || []);
-      setRecommendedScholarships(data.recommended_scholarships || []);
-      setScholarshipSource(data.source || '');
     } catch {
       setScholarshipError('Could not calculate fit score. Please try again.');
     } finally {
       setScholarshipLoading(false);
     }
-  };
-
-  const sourceBadge = (source: string) => {
-    if (!source) return null;
-    return (
-      <span style={{
-        display: 'inline-flex', alignItems: 'center', gap: '0.25rem',
-        padding: '0.25rem 0.75rem', borderRadius: 9999, fontSize: '0.75rem',
-        border: `2px solid ${border}`, color: sub, fontFamily: "'Roboto Slab',serif",
-      }}>
-        {sourceLabel(source)}
-      </span>
-    );
   };
 
   return (
@@ -444,17 +374,6 @@ export default function App() {
 
           {/* Right controls */}
           <div style={{ display:'flex', gap:'0.75rem', alignItems:'center' }}>
-            {backendOnline !== null && (
-              <span style={{
-                display:'inline-flex', alignItems:'center', gap:'0.35rem',
-                padding:'0.35rem 0.75rem', borderRadius:9999, fontSize:'0.75rem',
-                border:`2px solid ${border}`, color: backendOnline ? (dark ? C.chroma : C.moss) : C.ruby,
-                fontFamily:"'Roboto Slab',serif", fontWeight:600,
-              }} className="hidden sm:inline-flex">
-                {backendOnline ? <Wifi size={14} /> : <WifiOff size={14} />}
-                {backendOnline ? 'Backend Connected' : 'Backend Offline'}
-              </span>
-            )}
             <button onClick={() => setDark(!dark)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
               style={btn(cardBg, fg2, { padding:'0.5rem' })}>
               {dark ? <Sun size={20} color={C.darkAccent} /> : <Moon size={20} color={C.navy} />}
@@ -642,29 +561,13 @@ export default function App() {
               <div style={{ ...card({ backgroundColor: dark?'rgba(91,126,60,0.12)':'rgba(144,171,139,0.12)' }), padding:'1.5rem' }}>
                 <div style={{ display:'flex', gap:'1rem', alignItems:'flex-start', marginBottom:'1.5rem' }}>
                   <div style={{ padding:'0.75rem', borderRadius:'1rem', backgroundColor:C.chroma, flexShrink:0 }}><Brain size={24} color={C.navy} /></div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ marginBottom:'0.75rem' }}>{sourceBadge(aiSource)}</div>
-                    <pre style={{ fontFamily:'system-ui,sans-serif', color:fg2, whiteSpace:'pre-wrap', lineHeight:1.6, margin:0 }}>{aiResp}</pre>
-                  </div>
+                  <pre style={{ fontFamily:'system-ui,sans-serif', color:fg2, whiteSpace:'pre-wrap', lineHeight:1.6, margin:0, flex:1 }}>{aiResp}</pre>
                 </div>
                 <div style={{ display:'flex', gap:'0.75rem', flexWrap:'wrap', paddingTop:'1.5rem', borderTop:`4px solid ${border}` }}>
                   <button onClick={() => { go('quiz'); loadQuiz(query); }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white)}><BookOpen size={18} /> Generate Practice Quiz</button>
                   <button onClick={() => { if(query && !saved.includes(query)) { setSaved([...saved,query]); setMods(m=>m+1); } }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(C.sageMid, C.navy)}><Heart size={18} /> Save to Dashboard</button>
                   <button onClick={() => setLoBw(!loBw)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(loBw?C.moss:C.sand, loBw?C.white:C.navy)}><Globe size={18} /> Low-BW: {loBw?'ON':'OFF'}</button>
                 </div>
-                <div style={{ display:'flex', gap:'1rem', flexWrap:'wrap', marginTop:'1.5rem', paddingTop:'1.5rem', borderTop:`4px solid ${border}` }}>
-                  <input style={{ ...inp, flex:1, minWidth:200 }} value={followUp} onChange={e=>setFollowUp(e.target.value)} onKeyDown={e=>e.key==='Enter'&&!assistantLoading&&askFollowUp()} placeholder="Ask a follow-up question..." />
-                  <button onClick={askFollowUp} disabled={assistantLoading || !followUp.trim() || !query.trim()} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white, { opacity: assistantLoading || !followUp.trim() ? 0.6 : 1 })}>
-                    {assistantLoading ? <Loader2 size={18} className="animate-spin" /> : <HelpCircle size={18} />} Ask
-                  </button>
-                </div>
-                {assistantError && <p style={{ color:C.ruby, marginTop:'1rem', marginBottom:0 }}>{assistantError}</p>}
-                {assistantResp && (
-                  <div style={{ marginTop:'1rem', padding:'1rem', borderRadius:'1rem', border:`2px solid ${border}`, backgroundColor: cardBg }}>
-                    <div style={{ marginBottom:'0.5rem' }}>{sourceBadge(assistantSource)}</div>
-                    <pre style={{ fontFamily:'system-ui,sans-serif', color:fg2, whiteSpace:'pre-wrap', lineHeight:1.6, margin:0 }}>{assistantResp}</pre>
-                  </div>
-                )}
               </div>
             )}
             {saved.length > 0 && (
@@ -701,10 +604,9 @@ export default function App() {
               <>
                 {/* Progress */}
                 <div style={{ ...card(), padding:'1rem', marginBottom:'1.5rem' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.75rem', flexWrap:'wrap', gap:'0.5rem' }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.75rem' }}>
                     <span style={{ fontFamily:"'Roboto Slab',serif", color:fg2 }}>Question {qIdx+1} of {quizQuestions.length}</span>
                     <span style={{ color:sub }}>Topic: {currentQuestion.topic || quizTopic}</span>
-                    {quizSource && sourceBadge(quizSource)}
                   </div>
                   <div style={{ height:12, borderRadius:9999, backgroundColor: dark?C.navyL:C.sand, overflow:'hidden' }}>
                     <div style={{ height:'100%', backgroundColor: dark?C.chroma:C.moss, width:`${((qIdx+1)/quizQuestions.length)*100}%`, transition:'width 0.5s' }} />
@@ -786,9 +688,7 @@ export default function App() {
           <div>
             <div style={{ textAlign:'center', marginBottom:'2rem' }}>
               <h1 style={{ fontFamily:"'Platypi',serif", fontSize:'2.25rem', fontWeight:700, color:fg2, margin:'0 0 0.5rem' }}>Welcome back, {user?.name||'Scholar'}</h1>
-              <p style={{ color:sub }}>
-                {dashboardLoading ? 'Loading your progress...' : recommendedTopic ? `Recommended next topic: ${recommendedTopic}` : 'Track your progress and continue your STEM journey'}
-              </p>
+              <p style={{ color:sub }}>Track your progress and continue your STEM journey</p>
               {dashboardError && <p style={{ color:C.ruby, marginTop:'0.75rem' }}>{dashboardError}</p>}
             </div>
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'1.5rem', marginBottom:'2rem' }}>
@@ -809,14 +709,6 @@ export default function App() {
                 </div>
               ))}
             </div>
-            {saved.length > 0 && (
-              <div style={{ ...card(), padding:'1.5rem', marginBottom:'2rem' }}>
-                <h3 style={{ fontFamily:"'Platypi',serif", fontWeight:700, color:fg2, marginBottom:'1rem' }}>Saved Topics</h3>
-                <div style={{ display:'flex', gap:'0.5rem', flexWrap:'wrap' }}>
-                  {saved.map((t,i) => <span key={i} style={{ padding:'0.25rem 0.75rem', borderRadius:9999, backgroundColor: dark?'rgba(162,203,139,0.3)':'rgba(144,171,139,0.3)', color:fg2, fontSize:'0.875rem' }}>{t}</span>)}
-                </div>
-              </div>
-            )}
             {/* Quick Actions */}
             <div style={{ ...card(), padding:'1.5rem' }}>
               <h3 style={{ fontFamily:"'Platypi',serif", fontWeight:700, color:fg2, marginBottom:'1rem' }}>Quick Actions</h3>
@@ -872,13 +764,12 @@ export default function App() {
                 </div>
               </div>
               <button onClick={calcFit} disabled={scholarshipLoading} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white, { width:'100%', marginTop:'1.5rem', padding:'1rem', fontSize:'1.1rem', opacity: scholarshipLoading ? 0.7 : 1 })}>
-                {scholarshipLoading ? <Loader2 size={18} className="animate-spin" /> : <Calculator size={18} />} Calculate My Fit Score
+                {scholarshipLoading ? <Loader2 size={18} className="animate-spin" /> : null} Calculate My Fit Score
               </button>
               {scholarshipError && <p style={{ color:C.ruby, marginTop:'1rem', textAlign:'center' }}>{scholarshipError}</p>}
             </div>
             {fitScore !== null && (
               <div style={{ ...card(), padding:'2rem', textAlign:'center', marginBottom:'2rem' }}>
-                <div style={{ marginBottom:'1rem' }}>{sourceBadge(scholarshipSource)}</div>
                 <h3 style={{ fontFamily:"'Platypi',serif", fontSize:'1.5rem', fontWeight:700, color:fg2, marginBottom:'1.5rem' }}>Scholarship Fit Score</h3>
                 <div style={{ position:'relative', width:192, height:192, margin:'0 auto 1rem' }}>
                   <svg viewBox="0 0 100 100" style={{ width:'100%', height:'100%', transform:'rotate(-90deg)' }}>
@@ -919,20 +810,6 @@ export default function App() {
                 ))}
               </div>
             </div>
-            {recommendedScholarships.length > 0 && (
-              <div style={{ ...card(), padding:'1.5rem', marginTop:'1.5rem' }}>
-                <h3 style={{ fontFamily:"'Platypi',serif", fontWeight:700, color:fg2, marginBottom:'1rem' }}>Recommended Scholarships</h3>
-                {recommendedScholarships.map((s, i) => (
-                  <div key={i} style={{ marginBottom:'1rem', paddingBottom:'1rem', borderBottom: i < recommendedScholarships.length - 1 ? `2px solid ${border}` : 'none' }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', gap:'1rem', flexWrap:'wrap', marginBottom:'0.25rem' }}>
-                      <strong style={{ color:fg2 }}>{s.name}</strong>
-                      <span style={{ color: dark?C.chroma:C.moss, fontSize:'0.875rem' }}>{s.fit} fit</span>
-                    </div>
-                    <p style={{ color:sub, margin:0, fontSize:'0.875rem' }}>{s.reason}</p>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         )}
       </main>
