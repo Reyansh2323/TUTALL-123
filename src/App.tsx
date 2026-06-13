@@ -1,20 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import {
-  GraduationCap, Sun, Moon, Home, Brain, BookOpen, BarChart3,
+  GraduationCap, Sun, Moon, Home, Brain, BookOpen,
   DollarSign, LogIn, User, Search, Sparkles, CheckCircle,
-  XCircle, Target, AlertTriangle,
-  Calculator, Globe, Award, Heart, ArrowRight, Menu, X, Loader2,
+  XCircle, AlertTriangle,
+  Calculator, Globe, Heart, ArrowRight, Menu, X, Loader2,
 } from 'lucide-react';
 import {
   fetchExplain,
-  fetchDashboard,
   fetchScholarshipMatch,
   formatExplainResponse,
 } from './api';
 
-const STUDENT_ID = 'demo-user';
-
-type Page = 'home' | 'login' | 'learning' | 'dashboard' | 'scholarship';
+type Page = 'home' | 'login' | 'learning' | 'scholarship';
 interface UserData { email: string; name: string; isFGLI: boolean; }
 
 const C = {
@@ -55,12 +52,6 @@ export default function App() {
   const [aiError, setAiError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string[]>([]);
   const [loBw, setLoBw] = useState(false);
-
-  // Dashboard
-  const [mods, setMods] = useState(0);
-  const [acc, setAcc] = useState(0);
-  const [ready, setReady] = useState(0);
-  const [dashboardError, setDashboardError] = useState<string | null>(null);
 
   // Scholarship
   const [gpa, setGpa] = useState('');
@@ -112,23 +103,6 @@ export default function App() {
     document.documentElement.classList.toggle('dark', dark);
   }, [dark]);
 
-  const loadDashboard = async () => {
-    setDashboardError(null);
-    try {
-      const data = await fetchDashboard(STUDENT_ID);
-      setMods(data.completed_modules ?? 0);
-      setAcc(data.quiz_accuracy ?? 0);
-      setReady(data.scholarship_readiness ?? 0);
-      if (data.saved_topics?.length) setSaved(data.saved_topics);
-    } catch {
-      setDashboardError('Could not load dashboard data. Please try again.');
-    }
-  };
-
-  useEffect(() => {
-    if (page === 'dashboard') void loadDashboard();
-  }, [page]);
-
   const bg = dark ? C.darkBg : C.sage;
   const fg2 = dark ? C.darkText : C.navy;
   const sub = dark ? C.darkMuted : C.slate;
@@ -160,7 +134,6 @@ export default function App() {
   const nav = [
     { id: 'home' as Page, label: 'Home', Icon: Home },
     { id: 'learning' as Page, label: 'AccessSTEM AI', Icon: Brain },
-    { id: 'dashboard' as Page, label: 'Dashboard', Icon: BarChart3 },
     { id: 'scholarship' as Page, label: 'Scholarship Advisor', Icon: DollarSign },
   ];
 
@@ -174,7 +147,7 @@ export default function App() {
     if (email && pass) {
       setUser({ email, name: uname || email.split('@')[0], isFGLI: fgli });
       setLoggedIn(true);
-      go('dashboard');
+      go('learning');
     }
   };
 
@@ -208,7 +181,6 @@ export default function App() {
       });
       const scoreVal = data.fit_score ?? data.readiness_score ?? 0;
       setFitScore(scoreVal);
-      setReady(scoreVal);
       setScholarshipSummary(data.summary || '');
       setStrengths(data.strengths || []);
       setImprovements(data.improvements || []);
@@ -472,7 +444,7 @@ export default function App() {
                   <pre style={{ fontFamily:'system-ui,sans-serif', color:fg2, whiteSpace:'pre-wrap', lineHeight:1.6, margin:0, flex:1 }}>{aiResp}</pre>
                 </div>
                 <div style={{ display:'flex', gap:'0.75rem', flexWrap:'wrap', paddingTop:'1.5rem', borderTop:`4px solid ${border}` }}>
-                  <button onClick={() => { if(query && !saved.includes(query)) { setSaved([...saved,query]); setMods(m=>m+1); } }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(C.sageMid, C.navy)}><Heart size={18} /> Save to Dashboard</button>
+                  <button onClick={() => { if(query && !saved.includes(query)) { setSaved([...saved,query]); } }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(C.sageMid, C.navy)}><Heart size={18} /> Save Topic</button>
                   <button onClick={() => setLoBw(!loBw)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(loBw?C.moss:C.sand, loBw?C.white:C.navy)}><Globe size={18} /> Low-BW: {loBw?'ON':'OFF'}</button>
                 </div>
               </div>
@@ -485,53 +457,6 @@ export default function App() {
                 </div>
               </div>
             )}
-          </div>
-        )}
-
-        {/* DASHBOARD */}
-        {page === 'dashboard' && (
-          <div>
-            <div style={{ textAlign:'center', marginBottom:'2rem' }}>
-              <h1 style={{ fontFamily:"'Platypi',serif", fontSize:'2.25rem', fontWeight:700, color:fg2, margin:'0 0 0.5rem' }}>Welcome back, {user?.name||'Scholar'}</h1>
-              <p style={{ color:sub }}>Track your progress and continue your STEM journey</p>
-              {dashboardError && <p style={{ color:C.ruby, marginTop:'0.75rem' }}>{dashboardError}</p>}
-            </div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:'1.5rem', marginBottom:'2rem' }}>
-              {[
-                { Icon:BookOpen, label:'Completed Modules', val:mods, dot:true },
-                { Icon:Target, label:'Quiz Accuracy', val:acc+'%', dot:acc>=70 },
-                { Icon:Award, label:'Scholarship Readiness', val:ready+'%', dot:ready>=50 },
-              ].map(({ Icon, label, val, dot }) => (
-                <div key={label} style={{ ...card(), padding:'1.5rem' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem' }}>
-                    <div style={{ padding:'0.75rem', borderRadius:'1rem', backgroundColor: dark?C.forest:C.sageMid }}>
-                      <Icon size={24} color={dark?C.neon:C.navy} />
-                    </div>
-                    <div style={{ width:12, height:12, borderRadius:'50%', backgroundColor: dot?(dark?C.chroma:C.moss):C.ruby, boxShadow: dot?`0 0 8px ${dark?C.chroma:C.moss}`:'none' }} />
-                  </div>
-                  <p style={{ fontFamily:"'Roboto Slab',serif", color:sub, margin:'0 0 0.25rem', fontSize:'0.875rem' }}>{label}</p>
-                  <p style={{ fontFamily:"'Platypi',serif", fontSize:'2.5rem', fontWeight:700, color:fg2, margin:0 }}>{val}</p>
-                </div>
-              ))}
-            </div>
-            {/* Quick Actions */}
-            <div style={{ ...card(), padding:'1.5rem' }}>
-              <h3 style={{ fontFamily:"'Platypi',serif", fontWeight:700, color:fg2, marginBottom:'1rem' }}>Quick Actions</h3>
-              <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(140px,1fr))', gap:'1rem' }}>
-                {[
-                  { Icon:Brain, label:'Start Learning', p:'learning' as Page },
-                  { Icon:BookOpen, label:'Take Quiz', p:'quiz' as Page },
-                  { Icon:DollarSign, label:'Scholarships', p:'scholarship' as Page },
-                  { Icon:Heart, label:'Saved Topics', p:'learning' as Page },
-                ].map(({ Icon, label, p }) => (
-                  <button key={label} onClick={() => go(p)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-                    style={{ ...card({ backgroundColor: dark?'rgba(91,126,60,0.4)':'rgba(144,171,139,0.4)' }), padding:'1rem', textAlign:'center', cursor:'none', border:`4px solid ${border}` }}>
-                    <Icon size={32} color={fg2} style={{ margin:'0 auto 0.5rem' }} />
-                    <span style={{ fontFamily:"'Roboto Slab',serif", color:fg2, fontSize:'0.875rem' }}>{label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
         )}
 
