@@ -1,24 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import {
   GraduationCap, Sun, Moon, Home, Brain, BookOpen, BarChart3,
-  DollarSign, LogIn, User, Search, Sparkles, HelpCircle, CheckCircle,
-  XCircle, ChevronRight, Target, Trophy, AlertTriangle, Lightbulb,
+  DollarSign, LogIn, User, Search, Sparkles, CheckCircle,
+  XCircle, Target, AlertTriangle,
   Calculator, Globe, Award, Heart, ArrowRight, Menu, X, Loader2,
 } from 'lucide-react';
 import {
   fetchExplain,
-  fetchQuiz,
-  saveProgress,
   fetchDashboard,
   fetchScholarshipMatch,
   formatExplainResponse,
-  normalizeQuizQuestion,
-  type QuizQuestion,
 } from './api';
 
 const STUDENT_ID = 'demo-user';
 
-type Page = 'home' | 'login' | 'learning' | 'quiz' | 'dashboard' | 'scholarship';
+type Page = 'home' | 'login' | 'learning' | 'dashboard' | 'scholarship';
 interface UserData { email: string; name: string; isFGLI: boolean; }
 
 const C = {
@@ -59,18 +55,6 @@ export default function App() {
   const [aiError, setAiError] = useState<string | null>(null);
   const [saved, setSaved] = useState<string[]>([]);
   const [loBw, setLoBw] = useState(false);
-
-  // Quiz
-  const [quizQuestions, setQuizQuestions] = useState<QuizQuestion[]>([]);
-  const [quizTopic, setQuizTopic] = useState('Photosynthesis');
-  const [quizLoading, setQuizLoading] = useState(false);
-  const [quizError, setQuizError] = useState<string | null>(null);
-  const [qIdx, setQIdx] = useState(0);
-  const [sel, setSel] = useState<number|null>(null);
-  const [hint, setHint] = useState(false);
-  const [score, setScore] = useState(0);
-  const [done, setDone] = useState(false);
-  const [answered, setAnswered] = useState(false);
 
   // Dashboard
   const [mods, setMods] = useState(0);
@@ -145,52 +129,6 @@ export default function App() {
     if (page === 'dashboard') void loadDashboard();
   }, [page]);
 
-  const resetQuizState = () => {
-    setQIdx(0);
-    setSel(null);
-    setHint(false);
-    setScore(0);
-    setDone(false);
-    setAnswered(false);
-  };
-
-  const loadQuiz = async (topic?: string) => {
-    const nextTopic = (topic || query || quizTopic || 'Photosynthesis').trim();
-    setQuizLoading(true);
-    setQuizError(null);
-    resetQuizState();
-    try {
-      const data = await fetchQuiz(nextTopic);
-      const questions = (data.questions || []).map(normalizeQuizQuestion);
-      if (!questions.length) throw new Error('No questions returned');
-      setQuizQuestions(questions);
-      setQuizTopic(data.topic || nextTopic);
-    } catch {
-      setQuizQuestions([]);
-      setQuizError('Could not load quiz. Please try again.');
-    } finally {
-      setQuizLoading(false);
-    }
-  };
-
-  const finishQuiz = async (finalScore: number) => {
-    const total = quizQuestions.length;
-    const pct = total ? Math.round((finalScore / total) * 100) : 0;
-    setDone(true);
-    setAcc(pct);
-    try {
-      const data = await saveProgress({
-        student_id: STUDENT_ID,
-        topic: quizTopic,
-        score: finalScore,
-        total,
-      });
-      if (typeof data.percentage === 'number') setAcc(data.percentage);
-    } catch {
-      // Keep local score if save fails
-    }
-  };
-
   const bg = dark ? C.darkBg : C.sage;
   const fg2 = dark ? C.darkText : C.navy;
   const sub = dark ? C.darkMuted : C.slate;
@@ -222,7 +160,6 @@ export default function App() {
   const nav = [
     { id: 'home' as Page, label: 'Home', Icon: Home },
     { id: 'learning' as Page, label: 'AccessSTEM AI', Icon: Brain },
-    { id: 'quiz' as Page, label: 'Quiz', Icon: BookOpen },
     { id: 'dashboard' as Page, label: 'Dashboard', Icon: BarChart3 },
     { id: 'scholarship' as Page, label: 'Scholarship Advisor', Icon: DollarSign },
   ];
@@ -230,9 +167,6 @@ export default function App() {
   const go = (p: Page) => {
     setPage(p);
     setMobileOpen(false);
-    if (p === 'quiz' && quizQuestions.length === 0 && !quizLoading) {
-      void loadQuiz(query || quizTopic);
-    }
   };
 
   const doLogin = (e: React.FormEvent) => {
@@ -260,32 +194,6 @@ export default function App() {
       setAiLoading(false);
     }
   };
-
-  const currentQuestion = quizQuestions[qIdx];
-
-  const selectAns = (i: number) => { if (!answered) setSel(i); };
-
-  const submit = () => {
-    if (sel !== null && !answered && currentQuestion) {
-      setAnswered(true);
-      if (sel === currentQuestion.correct) setScore(s => s + 1);
-    }
-  };
-
-  const next = () => {
-    if (!currentQuestion) return;
-    const finalScore = sel === currentQuestion.correct ? score + 1 : score;
-    if (qIdx < quizQuestions.length - 1) {
-      setQIdx(q => q + 1);
-      setSel(null);
-      setHint(false);
-      setAnswered(false);
-    } else {
-      finishQuiz(finalScore);
-    }
-  };
-
-  const reset = () => { loadQuiz(quizTopic); };
 
   const calcFit = async () => {
     setScholarshipLoading(true);
@@ -564,7 +472,6 @@ export default function App() {
                   <pre style={{ fontFamily:'system-ui,sans-serif', color:fg2, whiteSpace:'pre-wrap', lineHeight:1.6, margin:0, flex:1 }}>{aiResp}</pre>
                 </div>
                 <div style={{ display:'flex', gap:'0.75rem', flexWrap:'wrap', paddingTop:'1.5rem', borderTop:`4px solid ${border}` }}>
-                  <button onClick={() => { go('quiz'); loadQuiz(query); }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white)}><BookOpen size={18} /> Generate Practice Quiz</button>
                   <button onClick={() => { if(query && !saved.includes(query)) { setSaved([...saved,query]); setMods(m=>m+1); } }} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(C.sageMid, C.navy)}><Heart size={18} /> Save to Dashboard</button>
                   <button onClick={() => setLoBw(!loBw)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(loBw?C.moss:C.sand, loBw?C.white:C.navy)}><Globe size={18} /> Low-BW: {loBw?'ON':'OFF'}</button>
                 </div>
@@ -575,108 +482,6 @@ export default function App() {
                 <p style={{ fontFamily:"'Roboto Slab',serif", color:fg2, marginBottom:'0.75rem', fontWeight:600 }}>Saved Topics</p>
                 <div style={{ display:'flex', gap:'0.5rem', flexWrap:'wrap' }}>
                   {saved.map((t,i) => <span key={i} style={{ padding:'0.25rem 0.75rem', borderRadius:9999, backgroundColor: dark?'rgba(162,203,139,0.3)':'rgba(144,171,139,0.3)', color:fg2, fontSize:'0.875rem' }}>{t}</span>)}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* QUIZ */}
-        {page === 'quiz' && (
-          <div style={{ maxWidth:640, margin:'0 auto' }}>
-            {quizLoading ? (
-              <div style={{ ...card(), padding:'2rem', textAlign:'center' }}>
-                <Loader2 size={48} color={dark?C.chroma:C.moss} style={{ margin:'0 auto 1rem' }} className="animate-spin" />
-                <p style={{ color:sub }}>Loading quiz for {quizTopic}...</p>
-              </div>
-            ) : quizError ? (
-              <div style={{ ...card({ border:`4px solid ${C.ruby}` }), padding:'2rem', textAlign:'center' }}>
-                <AlertTriangle size={48} color={C.ruby} style={{ margin:'0 auto 1rem' }} />
-                <p style={{ color:fg2, marginBottom:'1.5rem' }}>{quizError}</p>
-                <button onClick={() => loadQuiz(query || quizTopic)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white)}>Try Again</button>
-              </div>
-            ) : !currentQuestion ? (
-              <div style={{ ...card(), padding:'2rem', textAlign:'center' }}>
-                <p style={{ color:sub, marginBottom:'1.5rem' }}>No quiz loaded yet.</p>
-                <button onClick={() => loadQuiz(query || quizTopic)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white)}>Load Quiz</button>
-              </div>
-            ) : !done ? (
-              <>
-                {/* Progress */}
-                <div style={{ ...card(), padding:'1rem', marginBottom:'1.5rem' }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', marginBottom:'0.75rem' }}>
-                    <span style={{ fontFamily:"'Roboto Slab',serif", color:fg2 }}>Question {qIdx+1} of {quizQuestions.length}</span>
-                    <span style={{ color:sub }}>Topic: {currentQuestion.topic || quizTopic}</span>
-                  </div>
-                  <div style={{ height:12, borderRadius:9999, backgroundColor: dark?C.navyL:C.sand, overflow:'hidden' }}>
-                    <div style={{ height:'100%', backgroundColor: dark?C.chroma:C.moss, width:`${((qIdx+1)/quizQuestions.length)*100}%`, transition:'width 0.5s' }} />
-                  </div>
-                </div>
-                {/* Question */}
-                <div style={{ ...card(), padding:'1.5rem' }}>
-                  <h2 style={{ fontFamily:"'Platypi',serif", fontSize:'1.375rem', fontWeight:700, color:fg2, marginBottom:'1.5rem' }}>{currentQuestion.question}</h2>
-                  <div style={{ display:'flex', flexDirection:'column', gap:'0.75rem', marginBottom:'1.5rem' }}>
-                    {currentQuestion.options.map((opt, i) => {
-                      let bg2 = dark ? C.navyL : C.white;
-                      let bc = border;
-                      if (answered) {
-                        if (i === currentQuestion.correct) { bg2 = dark?'rgba(162,203,139,0.3)':'rgba(91,126,60,0.25)'; bc = dark?C.chroma:C.moss; }
-                        else if (i === sel) { bg2 = 'rgba(196,69,69,0.25)'; bc = C.ruby; }
-                      } else if (sel === i) { bg2 = dark?'rgba(162,203,139,0.25)':'rgba(144,171,139,0.4)'; bc = dark?C.chroma:C.sageMid; }
-                      return (
-                        <button key={i} onClick={() => selectAns(i)} disabled={answered} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-                          style={{ padding:'1rem', textAlign:'left', borderRadius:'1rem', border:`4px solid ${bc}`, backgroundColor:bg2, color:fg2, cursor:'none', transition:'all 0.15s', display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                          <span>{opt}</span>
-                          {answered && i===currentQuestion.correct && <CheckCircle size={20} color={dark?C.chroma:C.moss} />}
-                          {answered && i===sel && i!==currentQuestion.correct && <XCircle size={20} color={C.ruby} />}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  {/* Hint */}
-                  {!answered && (
-                    hint
-                      ? <div style={{ ...card({ border:`4px solid ${dark?C.chroma:C.sageMid}`, backgroundColor: dark?'rgba(91,126,60,0.2)':'rgba(144,171,139,0.2)' }), padding:'1rem', display:'flex', gap:'0.75rem', alignItems:'flex-start', marginBottom:'1rem' }}>
-                          <HelpCircle size={20} color={dark?C.chroma:C.moss} style={{flexShrink:0}} />
-                          <p style={{ color:fg2, margin:0 }}>{currentQuestion.hint}</p>
-                        </div>
-                      : <button onClick={() => setHint(true)} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-                          style={btn(C.sageMid, C.navy, { marginBottom:'1rem' })}>
-                          <Lightbulb size={20} /> Stuck? Get a Guided Hint
-                        </button>
-                  )}
-                  <div style={{ display:'flex', justifyContent:'flex-end' }}>
-                    {!answered
-                      ? <button onClick={submit} disabled={sel===null} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-                          style={btn(sel!==null?(dark?C.chroma:C.navy):C.sand, sel!==null?(dark?C.navy:C.white):C.slate, { opacity: sel!==null?1:0.5 })}>
-                          Submit Answer
-                        </button>
-                      : <button onClick={next} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)}
-                          style={btn(dark?C.chroma:C.moss, dark?C.navy:C.white)}>
-                          {qIdx<quizQuestions.length-1?'Next Question':'See Results'} <ChevronRight size={18} />
-                        </button>
-                    }
-                  </div>
-                </div>
-              </>
-            ) : (
-              <div style={{ ...card(), padding:'2rem', textAlign:'center' }}>
-                <Trophy size={64} color={C.chroma} style={{ margin:'0 auto 1rem' }} />
-                <h2 style={{ fontFamily:"'Platypi',serif", fontSize:'2rem', fontWeight:700, color:fg2, marginBottom:'1.5rem' }}>Quiz Complete!</h2>
-                <div style={{ position:'relative', width:160, height:160, margin:'0 auto 1.5rem' }}>
-                  <svg viewBox="0 0 100 100" style={{ width:'100%', height:'100%', transform:'rotate(-90deg)' }}>
-                    <circle cx="50" cy="50" r="40" fill="none" stroke={dark?C.navyL:C.sand} strokeWidth="8" />
-                    <circle cx="50" cy="50" r="40" fill="none" stroke={dark?C.chroma:C.moss} strokeWidth="8"
-                      strokeDasharray="251" strokeDashoffset={251-(251*score/quizQuestions.length)} strokeLinecap="round" style={{ animation:'progress-fill 1s ease-out' }} />
-                  </svg>
-                  <div style={{ position:'absolute', inset:0, display:'flex', alignItems:'center', justifyContent:'center' }}>
-                    <span style={{ fontFamily:"'Platypi',serif", fontSize:'2.5rem', fontWeight:700, color:fg2 }}>{Math.round((score/quizQuestions.length)*100)}%</span>
-                  </div>
-                </div>
-                <p style={{ color:sub, marginBottom:'1.5rem' }}>You got {score} of {quizQuestions.length} correct.</p>
-                <div style={{ display:'flex', gap:'1rem', justifyContent:'center', flexWrap:'wrap' }}>
-                  <button onClick={reset} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(dark?C.chroma:C.navy, dark?C.navy:C.white)}>Try Again</button>
-                  <button onClick={() => go('dashboard')} onMouseEnter={() => setHover(true)} onMouseLeave={() => setHover(false)} style={btn(C.sageMid, C.navy)}>View Dashboard</button>
                 </div>
               </div>
             )}
