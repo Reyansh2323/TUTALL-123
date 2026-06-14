@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  GraduationCap, Sun, Moon, Home, Brain, BookOpen,
+  GraduationCap, Sun, Moon, Home, Brain,
   DollarSign, LogIn, User, Search, Sparkles, CheckCircle,
   XCircle, AlertTriangle,
   Calculator, Globe, Heart, ArrowRight, Menu, X, Loader2,
